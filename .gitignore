@@ -6,3 +6,10 @@ local.properties
 *.iml
 .superpowers/
 .worktrees/
+/android/
+/caches/
+/daemon/
+/kotlin-profile/
+/native/
+/notifications/
+/work/
