@@ -2,6 +2,7 @@ package ua.school.windowsdesktop
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -22,6 +23,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +65,7 @@ fun WindowsLearningDesktopApp(
                         onFiles = { screen = AppScreen.Explorer() },
                         onNotepad = { screen = AppScreen.Notepad() },
                         onTrash = { screen = AppScreen.Trash },
+                        trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
                     )
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
                         onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
@@ -95,14 +98,15 @@ fun WindowsLearningDesktopApp(
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
     onTrash: () -> Unit,
+    trashNotEmpty: Boolean,
 ) {
     Column(Modifier.fillMaxSize().background(Color(0xFF0078D7)).semantics { contentDescription = "Робочий стіл" }) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            DesktopItem("▣", stringResource(R.string.this_pc), onFiles)
-            DesktopItem("□", stringResource(R.string.my_files), onFiles)
-            DesktopItem("▤", stringResource(R.string.notepad), onNotepad)
-            DesktopItem("◩", "Paint", {})
-            DesktopItem("♲", stringResource(R.string.recycle_bin), onTrash)
+            DesktopItem(R.drawable.this_computer, stringResource(R.string.this_pc), onFiles)
+            DesktopItem(R.drawable.my_files, stringResource(R.string.my_files), onFiles)
+            DesktopItem(R.drawable.notepad, stringResource(R.string.notepad), onNotepad)
+            DesktopItem(R.drawable.paint, "Paint", {})
+            DesktopItem(if (trashNotEmpty) R.drawable.full_bin else R.drawable.empty_bin, stringResource(R.string.recycle_bin), onTrash)
         }
     }
 }
@@ -119,11 +123,11 @@ fun WindowsLearningDesktopApp(
         Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onDesktop) { Text("⊞", color = Color.White) }
+        IconButton(onClick = onDesktop) { Image(painterResource(R.drawable.start_btn), "Пуск", Modifier.size(32.dp)) }
         TextButton(onClick = {}) { Text("⌕", color = Color.White) }
-        TextButton(onClick = onFiles) { Text("▣   □", color = Color.White) }
-        TextButton(onClick = onNotepad) { Text("▤", color = Color.White) }
-        TextButton(onClick = {}) { Text("◩", color = Color.White) }
+        IconButton(onClick = onFiles) { Image(painterResource(R.drawable.my_files), stringResource(R.string.my_files), Modifier.size(30.dp)) }
+        IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
+        IconButton(onClick = {}) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
         Spacer(Modifier.weight(1f))
         Box {
         TextButton(onClick = { languageMenu = true }) {
@@ -145,10 +149,10 @@ fun WindowsLearningDesktopApp(
     }
 }
 
-@Composable private fun DesktopItem(symbol: String, label: String, action: () -> Unit) {
+@Composable private fun DesktopItem(icon: Int, label: String, action: () -> Unit) {
     Row(Modifier.width(190.dp).clickable(onClick = action).padding(vertical = 9.dp).semantics { contentDescription = label },
         verticalAlignment = Alignment.CenterVertically) {
-        Text(symbol, color = Color.White, style = MaterialTheme.typography.headlineMedium)
+        Image(painterResource(icon), label, Modifier.size(52.dp))
         Spacer(Modifier.width(12.dp)); Text(label, color = Color.White)
     }
 }
@@ -380,12 +384,11 @@ fun WindowsLearningDesktopApp(
                 .padding(vertical = 10.dp)
                 .semantics { contentDescription = displayName(node, showFileExtensions) }
         ) {
-            Text(
-                (if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + displayName(node, showFileExtensions),
-                Modifier.width(300.dp).padding(horizontal = 12.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(Modifier.width(300.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Image(painterResource(fileIcon(node)), null, Modifier.size(26.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(displayName(node, showFileExtensions), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Text(
                 DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(node.modifiedAt)),
                 Modifier.width(180.dp).padding(horizontal = 12.dp),
@@ -435,7 +438,9 @@ fun WindowsLearningDesktopApp(
             } else Column(Modifier.fillMaxWidth().verticalScroll(trashScroll)) {
                 deleted.forEach { node ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text((if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Image(painterResource(fileIcon(node)), null, Modifier.size(28.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(node.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         TextButton(onClick = { scope.launch { try { repository.restore(node.id) } catch (failure: Exception) { onError(errorMessage(failure)) } } }) {
                             Text(stringResource(R.string.restore))
                         }
@@ -558,6 +563,12 @@ private fun displayName(node: FileNode, showFileExtensions: Boolean): String =
     if (!showFileExtensions && node.kind == FileKind.TEXT && node.name.endsWith(".txt", ignoreCase = true)) {
         node.name.dropLast(4)
     } else node.name
+
+private fun fileIcon(node: FileNode): Int = when (node.kind) {
+    FileKind.FOLDER -> R.drawable.folder_icon
+    FileKind.TEXT -> R.drawable.text_icon
+    FileKind.PAINT -> R.drawable.image_icon
+}
 
 private fun Modifier.onSecondaryClick(
     pass: PointerEventPass = PointerEventPass.Main,
