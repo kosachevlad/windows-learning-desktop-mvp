@@ -49,6 +49,7 @@ private sealed interface AppScreen {
 fun WindowsLearningDesktopApp(
     repository: LearningFileRepository,
     keyboardLanguage: String = "uk",
+    onKeyboardLanguage: (String) -> Unit = {},
 ) {
     val snapshot by repository.snapshots.collectAsState()
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Desktop) }
@@ -76,6 +77,7 @@ fun WindowsLearningDesktopApp(
             }
             Taskbar(
                 keyboardLanguage = keyboardLanguage,
+                onKeyboardLanguage = onKeyboardLanguage,
                 onDesktop = { screen = AppScreen.Desktop },
                 onFiles = { screen = AppScreen.Explorer() },
                 onNotepad = { screen = AppScreen.Notepad() },
@@ -105,6 +107,7 @@ fun WindowsLearningDesktopApp(
 
 @Composable private fun Taskbar(
     keyboardLanguage: String,
+    onKeyboardLanguage: (String) -> Unit,
     onDesktop: () -> Unit,
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
@@ -119,15 +122,16 @@ fun WindowsLearningDesktopApp(
         TextButton(onClick = onNotepad) { Text("▤", color = Color.White) }
         TextButton(onClick = {}) { Text("◩", color = Color.White) }
         Spacer(Modifier.weight(1f))
-        Text(
-            when (keyboardLanguage) {
-                "uk" -> "УКР"
-                "en" -> "ENG"
-                else -> keyboardLanguage.uppercase(Locale.ROOT).take(2)
-            },
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 12.dp),
-        )
+        TextButton(onClick = { onKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk") }) {
+            Text(
+                when (keyboardLanguage) {
+                    "uk" -> "УКР"
+                    "en" -> "ENG"
+                    else -> keyboardLanguage.uppercase(Locale.ROOT).take(2)
+                },
+                color = Color.White,
+            )
+        }
         Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }

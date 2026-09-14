@@ -1,8 +1,8 @@
 package ua.school.windowsdesktop
 
 import android.os.Bundle
-import android.content.Context
-import android.view.inputmethod.InputMethodManager
+import android.annotation.SuppressLint
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -18,10 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import ua.school.windowsdesktop.data.LearningFileRepository
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private var repository: LearningFileRepository? = null
@@ -30,11 +27,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        keyboardLanguage = getSharedPreferences("settings", MODE_PRIVATE).getString("keyboard_language", "uk") ?: "uk"
         setContent {
             MaterialTheme {
                 when (val state = loadState) {
                     LoadState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    is LoadState.Ready -> WindowsLearningDesktopApp(state.repository, keyboardLanguage)
+                    is LoadState.Ready -> WindowsLearningDesktopApp(state.repository, keyboardLanguage, ::changeKeyboardLanguage)
                     is LoadState.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(getString(R.string.storage_open_failed, state.message))
                     }
@@ -50,20 +48,19 @@ class MainActivity : ComponentActivity() {
                 loadState = LoadState.Failed(failure.message ?: getString(R.string.error_unknown))
             }
         }
-        lifecycleScope.launch {
-            while (isActive) {
-                refreshKeyboardLanguage()
-                delay(250)
-            }
-        }
     }
 
-    private fun refreshKeyboardLanguage() {
-        val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        val subtype = manager.currentInputMethodSubtype
-        val tag = subtype?.languageTag?.ifBlank { subtype.locale.replace('_', '-') }.orEmpty()
-        val language = Locale.forLanguageTag(tag).language.ifBlank { Locale.getDefault().language }
-        keyboardLanguage = language.lowercase(Locale.ROOT).take(2)
+    private fun changeKeyboardLanguage(language: String) {
+        keyboardLanguage = language
+        getSharedPreferences("settings", MODE_PRIVATE).edit().putString("keyboard_language", language).apply()
+    }
+
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && event.isCtrlPressed && event.keyCode == KeyEvent.KEYCODE_SPACE) {
+            changeKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onDestroy() {
