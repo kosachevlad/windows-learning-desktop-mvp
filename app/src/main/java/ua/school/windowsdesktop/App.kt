@@ -288,7 +288,7 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     Box(
         Modifier
             .width(760.dp)
-            .onSecondaryClick { _ ->
+            .onSecondaryClick(PointerEventPass.Initial) { _ ->
                 select()
                 menu = true
             }
@@ -419,11 +419,14 @@ private fun nextUntitledName(nodes: Collection<FileNode>): String {
     while (true) { val candidate = if (number == 1) "Новий текстовий документ.txt" else "Новий текстовий документ ($number).txt"; if (candidate.lowercase() !in names) return candidate; number++ }
 }
 
-private fun Modifier.onSecondaryClick(action: (Offset) -> Unit): Modifier =
-    pointerInput(action) {
+private fun Modifier.onSecondaryClick(
+    pass: PointerEventPass = PointerEventPass.Main,
+    action: (Offset) -> Unit,
+): Modifier =
+    pointerInput(pass, action) {
         awaitPointerEventScope {
             while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
+                val event = awaitPointerEvent(pass)
 
                 if (
                     event.type == PointerEventType.Press &&
