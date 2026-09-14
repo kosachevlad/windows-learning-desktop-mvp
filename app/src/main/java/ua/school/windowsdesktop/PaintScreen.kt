@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
@@ -74,6 +75,9 @@ fun PaintScreen(
     var saveAsName by remember { mutableStateOf("") }
     var textPosition by remember { mutableStateOf<Offset?>(null) }
     var enteredText by remember { mutableStateOf("") }
+    var fileMenu by remember { mutableStateOf(false) }
+    var editMenu by remember { mutableStateOf(false) }
+    var viewMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(file?.id) {
         if (file != null) try {
@@ -109,38 +113,57 @@ fun PaintScreen(
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося зберегти малюнок") } }
     }
     fun requestClose() { if (dirty) closeRequested = true else onClose() }
+    fun undo() { if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }
+    fun redo() { if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }
+    fun clear() { baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }
 
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).onPreviewKeyEvent { event ->
         if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S) { save(); true } else false
     }) {
         WindowTitle(displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions) + if (dirty) " *" else "", ::requestClose)
-        Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { tool = PaintTool.PENCIL }
-            ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { tool = PaintTool.BRUSH }
-            ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { tool = PaintTool.ERASER }
-            ToolButton(stringResource(R.string.fill), tool == PaintTool.FILL) { tool = PaintTool.FILL }
-            ToolButton(stringResource(R.string.line), tool == PaintTool.LINE) { tool = PaintTool.LINE }
-            ToolButton(stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { tool = PaintTool.RECTANGLE }
-            ToolButton(stringResource(R.string.oval), tool == PaintTool.OVAL) { tool = PaintTool.OVAL }
-            ToolButton(stringResource(R.string.text_tool), tool == PaintTool.TEXT) { tool = PaintTool.TEXT }
-            TextButton(onClick = { if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }, enabled = actions.isNotEmpty()) { Text(stringResource(R.string.undo)) }
-            TextButton(onClick = { if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }, enabled = redoActions.isNotEmpty()) { Text(stringResource(R.string.redo)) }
-            TextButton(onClick = { baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }) { Text(stringResource(R.string.clear_canvas)) }
-            listOf(3f, 7f, 14f).forEach { width -> TextButton(onClick = { selectedWidth = width }) { Text(width.toInt().toString()) } }
-            listOf(Color.Black, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFFFFC107)).forEach { color ->
-                Box(Modifier.padding(4.dp).size(28.dp).background(color).border(if (selectedColor == color.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = color.toArgb() })
+        Row(Modifier.fillMaxWidth().background(Color(0xFFF5F5F5))) {
+            Box { TextButton(onClick = { fileMenu = true }) { Text(stringResource(R.string.file_menu)) }
+                DropdownMenu(fileMenu, { fileMenu = false }) {
+                    DropdownMenuItem({ Text(stringResource(R.string.save)) }, { fileMenu = false; save() }, enabled = loaded && dirty)
+                    DropdownMenuItem({ Text(stringResource(R.string.save_as)) }, { fileMenu = false; saveAsName = displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions); saveAsRequested = true })
+                    DropdownMenuItem({ Text(stringResource(R.string.exit)) }, { fileMenu = false; requestClose() })
+                }
             }
-            TextButton(onClick = { saveAsName = displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions); saveAsRequested = true }) { Text(stringResource(R.string.save_as)) }
-            Button(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
+            Box { TextButton(onClick = { editMenu = true }) { Text(stringResource(R.string.edit_menu)) }
+                DropdownMenu(editMenu, { editMenu = false }) {
+                    DropdownMenuItem({ Text(stringResource(R.string.undo)) }, { editMenu = false; undo() }, enabled = actions.isNotEmpty())
+                    DropdownMenuItem({ Text(stringResource(R.string.redo)) }, { editMenu = false; redo() }, enabled = redoActions.isNotEmpty())
+                    DropdownMenuItem({ Text(stringResource(R.string.clear_canvas)) }, { editMenu = false; clear() })
+                }
+            }
+            Box { TextButton(onClick = { viewMenu = true }) { Text(stringResource(R.string.view_menu)) }
+                DropdownMenu(viewMenu, { viewMenu = false }) {
+                    listOf(3f, 7f, 14f).forEach { width -> DropdownMenuItem({ Text("${stringResource(R.string.thickness)}: ${width.toInt()}") }, { selectedWidth = width; viewMenu = false }) }
+                }
+            }
         }
-        if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else {
-        val previewBitmap = remember(canvasSize, baseBitmap, actions) {
-            if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null
-        }
-        Canvas(
-            Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxHeight().width(52.dp).background(Color(0xFFE7E7E7)).verticalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                listOf(Color.Black, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFFFFC107), Color(0xFF7B1FA2), Color(0xFFFF7A00), Color(0xFFFF69B4), Color(0xFF795548), Color(0xFF81D4FA)).forEach { color ->
+                    Box(Modifier.padding(3.dp).size(32.dp).background(color).border(if (selectedColor == color.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = color.toArgb() })
+                }
+            }
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { tool = PaintTool.PENCIL }
+                    ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { tool = PaintTool.BRUSH }
+                    ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { tool = PaintTool.ERASER }
+                    ToolButton(stringResource(R.string.fill), tool == PaintTool.FILL) { tool = PaintTool.FILL }
+                    ToolButton(stringResource(R.string.line), tool == PaintTool.LINE) { tool = PaintTool.LINE }
+                    ToolButton(stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { tool = PaintTool.RECTANGLE }
+                    ToolButton(stringResource(R.string.oval), tool == PaintTool.OVAL) { tool = PaintTool.OVAL }
+                    ToolButton(stringResource(R.string.text_tool), tool == PaintTool.TEXT) { tool = PaintTool.TEXT }
+                }
+                if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                else {
+                val previewBitmap = remember(canvasSize, baseBitmap, actions) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null }
+                Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(tool, selectedColor, selectedWidth) {
                     if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
@@ -167,6 +190,8 @@ fun PaintScreen(
         ) {
             previewBitmap?.let { drawImage(it.asImageBitmap(), dstSize = canvasSize) }
         }
+        }
+            }
         }
     }
 

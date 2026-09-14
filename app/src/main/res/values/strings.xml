@@ -32,5 +32,7 @@
     <string name="line">Лінія</string><string name="rectangle">Прямокутник</string><string name="oval">Овал</string>
     <string name="brush">Пензель</string><string name="fill">Заливка</string><string name="text_tool">Текст</string>
     <string name="enter_text">Введіть текст</string>
+    <string name="file_menu">Файл</string><string name="edit_menu">Змінити</string><string name="view_menu">Вигляд</string>
+    <string name="exit">Вихід</string>
     <string name="undo">Скасувати</string><string name="redo">Повторити</string><string name="thickness">Товщина</string>
 </resources>
