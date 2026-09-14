@@ -1,8 +1,6 @@
 package ua.school.windowsdesktop
 
 import android.os.Bundle
-import android.annotation.SuppressLint
-import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -23,11 +21,10 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 class MainActivity : ComponentActivity() {
     private var repository: LearningFileRepository? = null
     private var loadState by mutableStateOf<LoadState>(LoadState.Loading)
-    private var keyboardLanguage by mutableStateOf("uk")
+    private var keyboardLanguage by mutableStateOf("unknown")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        keyboardLanguage = getSharedPreferences("settings", MODE_PRIVATE).getString("keyboard_language", "uk") ?: "uk"
         setContent {
             MaterialTheme {
                 when (val state = loadState) {
@@ -52,15 +49,6 @@ class MainActivity : ComponentActivity() {
 
     private fun changeKeyboardLanguage(language: String) {
         keyboardLanguage = language
-        getSharedPreferences("settings", MODE_PRIVATE).edit().putString("keyboard_language", language).apply()
-    }
-
-    @SuppressLint("RestrictedApi")
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && event.isCtrlPressed && event.keyCode == KeyEvent.KEYCODE_SPACE) {
-            changeKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
-        }
-        return super.dispatchKeyEvent(event)
     }
 
     override fun onDestroy() {

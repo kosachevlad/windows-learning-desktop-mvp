@@ -33,7 +33,6 @@ import kotlin.math.roundToInt
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.launch
 import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.*
@@ -70,7 +69,8 @@ fun WindowsLearningDesktopApp(
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it })
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
-                        onError = { error = it })
+                        onError = { error = it }, keyboardLanguage = keyboardLanguage,
+                        onKeyboardLanguage = onKeyboardLanguage)
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it })
                 }
@@ -112,6 +112,7 @@ fun WindowsLearningDesktopApp(
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
 ) {
+    var languageMenu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -122,15 +123,21 @@ fun WindowsLearningDesktopApp(
         TextButton(onClick = onNotepad) { Text("▤", color = Color.White) }
         TextButton(onClick = {}) { Text("◩", color = Color.White) }
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = { onKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk") }) {
+        Box {
+        TextButton(onClick = { languageMenu = true }) {
             Text(
                 when (keyboardLanguage) {
                     "uk" -> "УКР"
                     "en" -> "ENG"
-                    else -> keyboardLanguage.uppercase(Locale.ROOT).take(2)
+                    else -> "--"
                 },
                 color = Color.White,
             )
+        }
+            DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+                DropdownMenuItem(text = { Text("Українська") }, onClick = { onKeyboardLanguage("uk"); languageMenu = false })
+                DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
+            }
         }
         Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
@@ -434,7 +441,11 @@ fun WindowsLearningDesktopApp(
     )
 }
 
-@Composable private fun NotepadScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onClose: () -> Unit, onError: (String) -> Unit) {
+@Composable private fun NotepadScreen(
+    repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>,
+    onClose: () -> Unit, onError: (String) -> Unit,
+    keyboardLanguage: String, onKeyboardLanguage: (String) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var currentFileId by remember(file?.id) { mutableStateOf(file?.id) }
     var currentName by remember(file?.id) { mutableStateOf(file?.name ?: "Новий текстовий документ.txt") }
@@ -457,7 +468,14 @@ fun WindowsLearningDesktopApp(
     fun requestSaveAs() { saveAsName = currentName; saveAsRequested = true }
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color.White).onPreviewKeyEvent { event ->
-        if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S) { save(); true } else false
+        when {
+            event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_SPACE -> {
+                if (keyboardLanguage != "unknown") onKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
+                false
+            }
+            event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S -> { save(); true }
+            else -> false
+        }
     }) {
         WindowTitle(currentName + if (dirty) " *" else "", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) {
@@ -467,7 +485,17 @@ fun WindowsLearningDesktopApp(
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else OutlinedTextField(
             text,
-            { text = it },
+            { updated ->
+                if (keyboardLanguage == "unknown" && updated.length > text.length) {
+                    updated.lastOrNull { it.isLetter() }?.let { character ->
+                        when {
+                            character in 'А'..'я' || character == 'І' || character == 'і' || character == 'Ї' || character == 'ї' || character == 'Є' || character == 'є' || character == 'Ґ' || character == 'ґ' -> onKeyboardLanguage("uk")
+                            character in 'A'..'Z' || character in 'a'..'z' -> onKeyboardLanguage("en")
+                        }
+                    }
+                }
+                text = updated
+            },
             Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" },
             textStyle = MaterialTheme.typography.bodyLarge,
         )
