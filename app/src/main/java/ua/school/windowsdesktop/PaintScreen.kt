@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -38,12 +39,13 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
 
-private enum class PaintTool { PENCIL, ERASER, LINE, RECTANGLE, OVAL }
+private enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
 private data class PaintAction(
     val tool: PaintTool,
     val points: List<Offset>,
     val color: Int,
     val width: Float,
+    val text: String = "",
 )
 
 @Composable
@@ -70,6 +72,8 @@ fun PaintScreen(
     var closeRequested by remember { mutableStateOf(false) }
     var saveAsRequested by remember { mutableStateOf(false) }
     var saveAsName by remember { mutableStateOf("") }
+    var textPosition by remember { mutableStateOf<Offset?>(null) }
+    var enteredText by remember { mutableStateOf("") }
 
     LaunchedEffect(file?.id) {
         if (file != null) try {
@@ -113,10 +117,13 @@ fun PaintScreen(
         WindowTitle(displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions) + if (dirty) " *" else "", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { tool = PaintTool.PENCIL }
+            ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { tool = PaintTool.BRUSH }
             ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { tool = PaintTool.ERASER }
+            ToolButton(stringResource(R.string.fill), tool == PaintTool.FILL) { tool = PaintTool.FILL }
             ToolButton(stringResource(R.string.line), tool == PaintTool.LINE) { tool = PaintTool.LINE }
             ToolButton(stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { tool = PaintTool.RECTANGLE }
             ToolButton(stringResource(R.string.oval), tool == PaintTool.OVAL) { tool = PaintTool.OVAL }
+            ToolButton(stringResource(R.string.text_tool), tool == PaintTool.TEXT) { tool = PaintTool.TEXT }
             TextButton(onClick = { if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }, enabled = actions.isNotEmpty()) { Text(stringResource(R.string.undo)) }
             TextButton(onClick = { if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }, enabled = redoActions.isNotEmpty()) { Text(stringResource(R.string.redo)) }
             TextButton(onClick = { baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }) { Text(stringResource(R.string.clear_canvas)) }
@@ -128,14 +135,26 @@ fun PaintScreen(
             Button(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
         }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else Canvas(
+        else {
+        val previewBitmap = remember(canvasSize, baseBitmap, actions) {
+            if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null
+        }
+        Canvas(
             Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(tool, selectedColor, selectedWidth) {
-                    detectDragGestures(
+                    if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
+                        if (tool == PaintTool.FILL) {
+                            actions = actions + PaintAction(PaintTool.FILL, listOf(point), selectedColor, selectedWidth)
+                            redoActions = emptyList(); dirty = true
+                        } else {
+                            textPosition = point; enteredText = ""
+                        }
+                    } else detectDragGestures(
                         onDragStart = { point ->
                             val color = if (tool == PaintTool.ERASER) AndroidColor.WHITE else selectedColor
-                            actions = actions + PaintAction(tool, listOf(point), color, if (tool == PaintTool.ERASER) selectedWidth * 4 else selectedWidth)
+                            val width = when (tool) { PaintTool.ERASER -> selectedWidth * 4; PaintTool.BRUSH -> selectedWidth * 2; else -> selectedWidth }
+                            actions = actions + PaintAction(tool, listOf(point), color, width)
                             redoActions = emptyList(); dirty = true
                         },
                         onDrag = { change, _ ->
@@ -146,8 +165,8 @@ fun PaintScreen(
                     )
                 }
         ) {
-            baseBitmap?.let { drawImage(it.asImageBitmap(), dstSize = IntSize(size.width.toInt(), size.height.toInt())) }
-            actions.forEach { drawPaintAction(it) }
+            previewBitmap?.let { drawImage(it.asImageBitmap(), dstSize = canvasSize) }
+        }
         }
     }
 
@@ -157,29 +176,37 @@ fun PaintScreen(
         dismissButton = { Row { TextButton(onClick = onClose) { Text(stringResource(R.string.dont_save)) }; TextButton(onClick = { closeRequested = false }) { Text(stringResource(R.string.cancel)) } } },
     )
     if (saveAsRequested) AlertDialog(
+        modifier = Modifier.dialogKeys(saveAsName.isNotBlank(), ::submitSaveAs) { saveAsRequested = false },
         onDismissRequest = { saveAsRequested = false }, title = { Text(stringResource(R.string.save_as)) },
         text = { OutlinedTextField(saveAsName, { saveAsName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
         confirmButton = { TextButton(onClick = ::submitSaveAs, enabled = saveAsName.isNotBlank()) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = { saveAsRequested = false }) { Text(stringResource(R.string.cancel)) } },
     )
+    textPosition?.let { position -> AlertDialog(
+        modifier = Modifier.dialogKeys(enteredText.isNotBlank(), {
+            actions = actions + PaintAction(PaintTool.TEXT, listOf(position), selectedColor, selectedWidth, enteredText)
+            redoActions = emptyList(); dirty = true; textPosition = null
+        }, { textPosition = null }),
+        onDismissRequest = { textPosition = null },
+        title = { Text(stringResource(R.string.enter_text)) },
+        text = { OutlinedTextField(enteredText, { enteredText = it }, singleLine = true) },
+        confirmButton = { TextButton(enabled = enteredText.isNotBlank(), onClick = {
+            actions = actions + PaintAction(PaintTool.TEXT, listOf(position), selectedColor, selectedWidth, enteredText)
+            redoActions = emptyList(); dirty = true; textPosition = null
+        }) { Text(stringResource(R.string.ok)) } },
+        dismissButton = { TextButton(onClick = { textPosition = null }) { Text(stringResource(R.string.cancel)) } },
+    ) }
 }
 
 @Composable private fun ToolButton(label: String, selected: Boolean, action: () -> Unit) =
     TextButton(onClick = action, colors = ButtonDefaults.textButtonColors(containerColor = if (selected) Color(0xFFCDE8FF) else Color.Transparent)) { Text(label) }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPaintAction(action: PaintAction) {
-    val color = Color(action.color)
-    val start = action.points.firstOrNull() ?: return
-    val end = action.points.lastOrNull() ?: return
-    when (action.tool) {
-        PaintTool.PENCIL, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> drawLine(color, a, b, action.width) }
-        PaintTool.LINE -> drawLine(color, start, end, action.width)
-        PaintTool.RECTANGLE -> drawRect(color, Offset(minOf(start.x, end.x), minOf(start.y, end.y)), Size(kotlin.math.abs(end.x - start.x), kotlin.math.abs(end.y - start.y)), style = Stroke(action.width))
-        PaintTool.OVAL -> drawOval(color, Offset(minOf(start.x, end.x), minOf(start.y, end.y)), Size(kotlin.math.abs(end.x - start.x), kotlin.math.abs(end.y - start.y)), style = Stroke(action.width))
-    }
+private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>): ByteArray {
+    val bitmap = renderBitmap(size, base, actions)
+    return ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
 }
 
-private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>): ByteArray {
+private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction>): Bitmap {
     val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
     val canvas = AndroidCanvas(bitmap); canvas.drawColor(AndroidColor.WHITE)
     base?.let { canvas.drawBitmap(it, null, Rect(0, 0, size.width, size.height), null) }
@@ -188,13 +215,35 @@ private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>):
         val start = action.points.firstOrNull() ?: return@forEach
         val end = action.points.lastOrNull() ?: return@forEach
         when (action.tool) {
-            PaintTool.PENCIL, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
+            PaintTool.PENCIL, PaintTool.BRUSH, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
+            PaintTool.FILL -> floodFill(bitmap, start.x.toInt(), start.y.toInt(), action.color)
             PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
             PaintTool.RECTANGLE -> canvas.drawRect(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
             PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
+            PaintTool.TEXT -> { paint.style = Paint.Style.FILL; paint.textSize = (action.width * 5).coerceAtLeast(18f); canvas.drawText(action.text, start.x, start.y, paint) }
         }
     }
-    return ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
+    return bitmap
+}
+
+private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int) {
+    if (startX !in 0 until bitmap.width || startY !in 0 until bitmap.height) return
+    val target = bitmap.getPixel(startX, startY)
+    if (target == replacement) return
+    val queue = IntArray(bitmap.width * bitmap.height)
+    var head = 0; var tail = 0
+    fun enqueue(x: Int, y: Int) {
+        if (x in 0 until bitmap.width && y in 0 until bitmap.height && bitmap.getPixel(x, y) == target) {
+            bitmap.setPixel(x, y, replacement)
+            queue[tail++] = y * bitmap.width + x
+        }
+    }
+    enqueue(startX, startY)
+    while (head < tail) {
+        val value = queue[head++]
+        val x = value % bitmap.width; val y = value / bitmap.width
+        enqueue(x + 1, y); enqueue(x - 1, y); enqueue(x, y + 1); enqueue(x, y - 1)
+    }
 }
 
 internal fun blankPaintPng(): ByteArray {

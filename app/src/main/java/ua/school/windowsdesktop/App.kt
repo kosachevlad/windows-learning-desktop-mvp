@@ -625,7 +625,7 @@ private fun Modifier.onSecondaryClick(
         }
     }
 
-private fun Modifier.dialogKeys(
+internal fun Modifier.dialogKeys(
     confirmEnabled: Boolean = true,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
