@@ -27,6 +27,10 @@ class AppLaunchTest {
         rule.onNodeWithText("Ім’я").assertExists()
         rule.onNodeWithText("Дата змінення").assertExists()
         rule.onNodeWithText("Новий текстовий документ").assertExists()
+        rule.onNodeWithText("Копіювати").assertExists()
+        rule.onNodeWithText("Вставити").assertExists()
+        rule.onNodeWithText("Перейменувати").assertExists()
+        rule.onNodeWithText("Видалити").assertExists()
         rule.onNodeWithContentDescription("Закрити").performClick()
         rule.onNodeWithText("Блокнот").performClick()
         rule.waitUntil(timeoutMillis = 10_000) {

@@ -18,7 +18,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 На іншому комп'ютері встановіть JDK 17 та Android SDK через Android Studio або офіційний sdkmanager, задайте `JAVA_HOME` і `ANDROID_HOME`, додайте `JAVA_HOME/bin` і `ANDROID_HOME/platform-tools` до PATH поточного термінала. Замість ANDROID_HOME можна вказати `sdk.dir=C:/path/to/Android/Sdk` у локальному, ігнорованому Git файлі `local.properties`. У Android Studio також виберіть JDK 17 у Gradle settings. Локальний допоміжний скрипт тоді не потрібний.
 
-Команди вище збирають застосунок та APK UI-тестів і запускають тести файлового домену та збереження. Деталі: [етап 2 — файлові операції](docs/stage-2-testing.md), [етап 3 — Room і збереження](docs/stage-3-testing.md), [етап 4 — інтерактивний сценарій](docs/stage-4-testing.md).
+Команди вище збирають застосунок та APK UI-тестів і запускають тести файлового домену та збереження. Деталі: [етап 2 — файлові операції](docs/stage-2-testing.md), [етап 3 — Room і збереження](docs/stage-3-testing.md), [етап 4 — інтерактивний сценарій](docs/stage-4-testing.md), [етап 5 — файлові операції та Кошик](docs/stage-5-testing.md).
 
 Результати:
 
