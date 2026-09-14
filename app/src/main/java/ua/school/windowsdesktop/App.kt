@@ -383,6 +383,9 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     var currentName by remember(file?.id) { mutableStateOf(file?.name ?: "Новий текстовий документ.txt") }
     var text by remember(file?.id) { mutableStateOf("") }; var saved by remember(file?.id) { mutableStateOf("") }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }; var closeRequested by remember { mutableStateOf(false) }
+    var saveAsRequested by remember { mutableStateOf(false) }
+    var saveAsName by remember { mutableStateOf("") }
+    val parentId = file?.parentId ?: FileOperations.ROOT_ID
     val dirty = loaded && text != saved
     LaunchedEffect(file?.id) { if (file != null) try { repository.readText(file.id).let { text = it; saved = it; loaded = true } } catch (failure: Exception) { onError(errorMessage(failure)); onClose() } }
     fun save(after: () -> Unit = {}) { scope.launch { try {
@@ -394,18 +397,35 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
         saved = text; after()
     } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun requestClose() { if (dirty) closeRequested = true else onClose() }
+    fun requestSaveAs() { saveAsName = currentName; saveAsRequested = true }
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color.White).onPreviewKeyEvent { event ->
         if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S) { save(); true } else false
     }) {
         WindowTitle(currentName + if (dirty) " *" else "", ::requestClose)
-        Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) { TextButton(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) } }
+        Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) {
+            TextButton(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
+            TextButton(onClick = ::requestSaveAs, enabled = loaded) { Text(stringResource(R.string.save_as)) }
+        }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else OutlinedTextField(text, { text = it }, Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" }, textStyle = MaterialTheme.typography.bodyLarge)
     }
     if (closeRequested) AlertDialog(onDismissRequest = { closeRequested = false }, title = { Text(stringResource(R.string.save_changes_question)) },
         confirmButton = { TextButton(onClick = { save(onClose) }) { Text(stringResource(R.string.save)) } },
         dismissButton = { Row { TextButton(onClick = onClose) { Text(stringResource(R.string.dont_save)) }; TextButton(onClick = { closeRequested = false }) { Text(stringResource(R.string.cancel)) } } })
+    if (saveAsRequested) AlertDialog(
+        onDismissRequest = { saveAsRequested = false },
+        title = { Text(stringResource(R.string.save_as)) },
+        text = { OutlinedTextField(saveAsName, { saveAsName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
+        confirmButton = { TextButton(enabled = saveAsName.isNotBlank(), onClick = { scope.launch { try {
+            val created = repository.createText(saveAsName, parentId, text)
+            currentFileId = created.id
+            currentName = created.name
+            saved = text
+            saveAsRequested = false
+        } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = { saveAsRequested = false }) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 @Composable private fun WindowTitle(title: String, onClose: () -> Unit) = Row(Modifier.fillMaxWidth().background(Color(0xFF1F4E79)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {

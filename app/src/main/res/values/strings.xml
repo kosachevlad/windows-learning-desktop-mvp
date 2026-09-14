@@ -18,7 +18,7 @@
     <string name="empty_recycle_bin_question">Назавжди видалити всі об’єкти з Кошика? Цю дію не можна скасувати.</string>
     <string name="delete_question">Перемістити «%1$s» до Кошика?</string>
     <string name="recycle_bin_empty">Кошик порожній</string>
-    <string name="save">Зберегти</string><string name="dont_save">Не зберігати</string>
+    <string name="save">Зберегти</string><string name="save_as">Зберегти як</string><string name="dont_save">Не зберігати</string>
     <string name="cancel">Скасувати</string><string name="ok">Гаразд</string>
     <string name="error_title">Помилка</string>
     <string name="error_name_conflict">Об’єкт із таким ім’ям уже існує.</string>
