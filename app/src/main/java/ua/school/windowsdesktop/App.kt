@@ -2,13 +2,17 @@ package ua.school.windowsdesktop
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +22,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -52,23 +57,32 @@ fun WindowsLearningDesktopApp(
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
     MaterialTheme {
-        when (val current = screen) {
-            AppScreen.Desktop -> DesktopScreen(
-                onFiles = { screen = AppScreen.Explorer() },
-                onNotepad = { screen = AppScreen.Notepad() },
-                onTrash = { screen = AppScreen.Trash },
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (val current = screen) {
+                    AppScreen.Desktop -> DesktopScreen(
+                        onFiles = { screen = AppScreen.Explorer() },
+                        onNotepad = { screen = AppScreen.Notepad() },
+                        onTrash = { screen = AppScreen.Trash },
+                    )
+                    is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
+                        onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
+                        onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
+                        clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it })
+                    is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
+                        onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
+                        onError = { error = it })
+                    AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
+                        onDesktop = { screen = AppScreen.Desktop }, onError = { error = it })
+                }
+            }
+            Taskbar(
                 keyboardLanguage = keyboardLanguage,
                 onKeyboardLanguage = onKeyboardLanguage,
+                onDesktop = { screen = AppScreen.Desktop },
+                onFiles = { screen = AppScreen.Explorer() },
+                onNotepad = { screen = AppScreen.Notepad() },
             )
-            is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
-                onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
-                onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
-                clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it })
-            is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
-                onError = { error = it })
-            AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
-                onDesktop = { screen = AppScreen.Desktop }, onError = { error = it })
         }
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
             title = { Text(stringResource(R.string.error_title)) }, text = { Text(message) },
@@ -80,12 +94,8 @@ fun WindowsLearningDesktopApp(
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
     onTrash: () -> Unit,
-    keyboardLanguage: String,
-    onKeyboardLanguage: (String) -> Unit,
 ) {
-    var languageMenu by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(Color(0xFF0078D7)).semantics { contentDescription = "Робочий стіл" },
-        verticalArrangement = Arrangement.SpaceBetween) {
+    Column(Modifier.fillMaxSize().background(Color(0xFF0078D7)).semantics { contentDescription = "Робочий стіл" }) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             DesktopItem("▣", stringResource(R.string.this_pc), onFiles)
             DesktopItem("□", stringResource(R.string.my_files), onFiles)
@@ -93,21 +103,37 @@ fun WindowsLearningDesktopApp(
             DesktopItem("◩", "Paint", {})
             DesktopItem("♲", stringResource(R.string.recycle_bin), onTrash)
         }
-        Row(Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(16.dp, 10.dp), Arrangement.SpaceBetween) {
-            Text("⊞    ⌕    ▣    □    ▤    ◩", color = Color.White)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    TextButton(onClick = { languageMenu = true }) {
-                        Text(if (keyboardLanguage == "en") "ENG" else "УКР", color = Color.White)
-                    }
-                    DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
-                        DropdownMenuItem(text = { Text("Українська") }, onClick = { languageMenu = false; onKeyboardLanguage("uk") })
-                        DropdownMenuItem(text = { Text("English") }, onClick = { languageMenu = false; onKeyboardLanguage("en") })
-                    }
-                }
-                Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White)
+    }
+}
+
+@Composable private fun Taskbar(
+    keyboardLanguage: String,
+    onKeyboardLanguage: (String) -> Unit,
+    onDesktop: () -> Unit,
+    onFiles: () -> Unit,
+    onNotepad: () -> Unit,
+) {
+    var languageMenu by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = onDesktop) { Text("⊞", color = Color.White) }
+        TextButton(onClick = {}) { Text("⌕", color = Color.White) }
+        TextButton(onClick = onFiles) { Text("▣   □", color = Color.White) }
+        TextButton(onClick = onNotepad) { Text("▤", color = Color.White) }
+        TextButton(onClick = {}) { Text("◩", color = Color.White) }
+        Spacer(Modifier.weight(1f))
+        Box {
+            TextButton(onClick = { languageMenu = true }) {
+                Text(if (keyboardLanguage == "en") "ENG" else "УКР", color = Color.White)
+            }
+            DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+                DropdownMenuItem(text = { Text("Українська") }, onClick = { languageMenu = false; onKeyboardLanguage("uk") })
+                DropdownMenuItem(text = { Text("English") }, onClick = { languageMenu = false; onKeyboardLanguage("en") })
             }
         }
+        Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
@@ -131,6 +157,7 @@ fun WindowsLearningDesktopApp(
     var renameTarget by remember { mutableStateOf<FileNode?>(null) }
     var deleteTarget by remember { mutableStateOf<FileNode?>(null) }
     var backgroundMenuPosition by remember { mutableStateOf<Offset?>(null) }
+    val explorerScroll = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     val current = nodes.firstOrNull { it.id == folderId }
     val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }.sortedBy { it.name.lowercase() }
@@ -179,7 +206,7 @@ fun WindowsLearningDesktopApp(
                     backgroundMenuPosition = position
                 }
         ) {
-            Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).verticalScroll(explorerScroll)) {
                 FileHeader()
 
                 if (children.isEmpty()) {
@@ -265,6 +292,7 @@ fun WindowsLearningDesktopApp(
                     }
                 }
             }
+            VerticalScrollIndicator(explorerScroll, Modifier.align(Alignment.CenterEnd))
         }
     }
     createKind?.let { kind -> AlertDialog(onDismissRequest = { createKind = null },
@@ -360,6 +388,7 @@ fun WindowsLearningDesktopApp(
     val deleted = nodes.filter { it.trashedAt != null }.sortedByDescending { it.trashedAt }
     var permanentTarget by remember { mutableStateOf<FileNode?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
+    val trashScroll = rememberScrollState()
     BackHandler(onBack = onDesktop)
     Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4))) {
         WindowTitle(stringResource(R.string.recycle_bin), onDesktop)
@@ -368,17 +397,22 @@ fun WindowsLearningDesktopApp(
                 Text(stringResource(R.string.empty_recycle_bin))
             }
         }
-        if (deleted.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.recycle_bin_empty)) }
-        } else deleted.forEach { node ->
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text((if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                TextButton(onClick = { scope.launch { try { repository.restore(node.id) } catch (failure: Exception) { onError(errorMessage(failure)) } } }) {
-                    Text(stringResource(R.string.restore))
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            if (deleted.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.recycle_bin_empty)) }
+            } else Column(Modifier.fillMaxWidth().verticalScroll(trashScroll)) {
+                deleted.forEach { node ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text((if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        TextButton(onClick = { scope.launch { try { repository.restore(node.id) } catch (failure: Exception) { onError(errorMessage(failure)) } } }) {
+                            Text(stringResource(R.string.restore))
+                        }
+                        TextButton(onClick = { permanentTarget = node }) { Text(stringResource(R.string.delete_permanently)) }
+                    }
+                    HorizontalDivider(color = Color(0xFFE0E0E0))
                 }
-                TextButton(onClick = { permanentTarget = node }) { Text(stringResource(R.string.delete_permanently)) }
             }
-            HorizontalDivider(color = Color(0xFFE0E0E0))
+            VerticalScrollIndicator(trashScroll, Modifier.align(Alignment.CenterEnd))
         }
     }
     permanentTarget?.let { target -> AlertDialog(
@@ -409,6 +443,7 @@ fun WindowsLearningDesktopApp(
     var loaded by remember(file?.id) { mutableStateOf(file == null) }; var closeRequested by remember { mutableStateOf(false) }
     var saveAsRequested by remember { mutableStateOf(false) }
     var saveAsName by remember { mutableStateOf("") }
+    val editorScroll = rememberScrollState()
     val parentId = file?.parentId ?: FileOperations.ROOT_ID
     val dirty = loaded && text != saved
     LaunchedEffect(file?.id) { if (file != null) try { repository.readText(file.id).let { text = it; saved = it; loaded = true } } catch (failure: Exception) { onError(errorMessage(failure)); onClose() } }
@@ -432,7 +467,19 @@ fun WindowsLearningDesktopApp(
             TextButton(onClick = ::requestSaveAs, enabled = loaded) { Text(stringResource(R.string.save_as)) }
         }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else OutlinedTextField(text, { text = it }, Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" }, textStyle = MaterialTheme.typography.bodyLarge)
+        else BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp).border(1.dp, Color.Gray)) {
+            val editorMinHeight = maxHeight
+            Box(Modifier.fillMaxSize().verticalScroll(editorScroll)) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = editorMinHeight).padding(12.dp)
+                        .semantics { contentDescription = "Редактор тексту" },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            VerticalScrollIndicator(editorScroll, Modifier.align(Alignment.CenterEnd))
+        }
     }
     if (closeRequested) AlertDialog(onDismissRequest = { closeRequested = false }, title = { Text(stringResource(R.string.save_changes_question)) },
         confirmButton = { TextButton(onClick = { save(onClose) }) { Text(stringResource(R.string.save)) } },
@@ -484,6 +531,23 @@ private fun Modifier.onSecondaryClick(
             }
         }
     }
+
+@Composable private fun VerticalScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
+    if (state.maxValue <= 0) return
+    BoxWithConstraints(modifier.fillMaxHeight().width(8.dp).background(Color(0x22000000))) {
+        val viewportPx = constraints.maxHeight.toFloat()
+        val totalPx = viewportPx + state.maxValue
+        val minimumPx = with(LocalDensity.current) { 32.dp.toPx() }
+        val thumbPx = (viewportPx * viewportPx / totalPx).coerceAtLeast(minimumPx).coerceAtMost(viewportPx)
+        val offsetPx = (viewportPx - thumbPx) * state.value.toFloat() / state.maxValue.toFloat()
+        Box(
+            Modifier.offset { IntOffset(0, offsetPx.roundToInt()) }
+                .fillMaxWidth()
+                .height(with(LocalDensity.current) { thumbPx.toDp() })
+                .background(Color(0x99000000))
+        )
+    }
+}
 
 private fun errorMessage(failure: Exception): String = when ((failure as? FileOperationException)?.code) {
     FileError.NAME_CONFLICT -> "Об’єкт із таким ім’ям уже існує."
