@@ -28,7 +28,7 @@ import ua.school.windowsdesktop.domain.*
 private sealed interface AppScreen {
     data object Desktop : AppScreen
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
-    data class Notepad(val fileId: String) : AppScreen
+    data class Notepad(val fileId: String? = null) : AppScreen
 }
 
 @Composable
@@ -36,25 +36,17 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     val snapshot by repository.snapshots.collectAsState()
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Desktop) }
     var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
     MaterialTheme {
         when (val current = screen) {
             AppScreen.Desktop -> DesktopScreen(
                 onFiles = { screen = AppScreen.Explorer() },
-                onNotepad = {
-                    scope.launch {
-                        try {
-                            val file = repository.createText(nextUntitledName(snapshot.nodes.values), FileOperations.ROOT_ID)
-                            screen = AppScreen.Notepad(file.id)
-                        } catch (failure: Exception) { error = errorMessage(failure) }
-                    }
-                },
+                onNotepad = { screen = AppScreen.Notepad() },
             )
             is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
                 onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
                 onDesktop = { screen = AppScreen.Desktop }, onError = { error = it })
-            is AppScreen.Notepad -> NotepadScreen(repository, snapshot.nodes[current.fileId],
-                onClose = { screen = AppScreen.Explorer(snapshot.nodes[current.fileId]?.parentId ?: FileOperations.ROOT_ID) },
+            is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
+                onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
                 onError = { error = it })
         }
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
@@ -149,19 +141,28 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     }; HorizontalDivider(color = Color(0xFFE8E8E8))
 }
 
-@Composable private fun NotepadScreen(repository: LearningFileRepository, file: FileNode?, onClose: () -> Unit, onError: (String) -> Unit) {
+@Composable private fun NotepadScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onClose: () -> Unit, onError: (String) -> Unit) {
     val scope = rememberCoroutineScope()
+    var currentFileId by remember(file?.id) { mutableStateOf(file?.id) }
+    var currentName by remember(file?.id) { mutableStateOf(file?.name ?: "Новий текстовий документ.txt") }
     var text by remember(file?.id) { mutableStateOf("") }; var saved by remember(file?.id) { mutableStateOf("") }
-    var loaded by remember(file?.id) { mutableStateOf(false) }; var closeRequested by remember { mutableStateOf(false) }
+    var loaded by remember(file?.id) { mutableStateOf(file == null) }; var closeRequested by remember { mutableStateOf(false) }
     val dirty = loaded && text != saved
     LaunchedEffect(file?.id) { if (file != null) try { repository.readText(file.id).let { text = it; saved = it; loaded = true } } catch (failure: Exception) { onError(errorMessage(failure)); onClose() } }
-    fun save(after: () -> Unit = {}) { val target = file ?: return; scope.launch { try { repository.writeText(target.id, text); saved = text; after() } catch (failure: Exception) { onError(errorMessage(failure)) } } }
+    fun save(after: () -> Unit = {}) { scope.launch { try {
+        val id = currentFileId
+        if (id == null) {
+            val created = repository.createText(nextUntitledName(nodes), FileOperations.ROOT_ID, text)
+            currentFileId = created.id; currentName = created.name
+        } else repository.writeText(id, text)
+        saved = text; after()
+    } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun requestClose() { if (dirty) closeRequested = true else onClose() }
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color.White).onPreviewKeyEvent { event ->
         if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S) { save(); true } else false
     }) {
-        WindowTitle((file?.name ?: stringResource(R.string.notepad)) + if (dirty) " *" else "", ::requestClose)
+        WindowTitle(currentName + if (dirty) " *" else "", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) { TextButton(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) } }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else OutlinedTextField(text, { text = it }, Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" }, textStyle = MaterialTheme.typography.bodyLarge)

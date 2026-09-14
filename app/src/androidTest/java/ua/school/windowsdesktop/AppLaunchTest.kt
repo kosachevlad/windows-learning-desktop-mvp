@@ -34,4 +34,18 @@ class AppLaunchTest {
         }
         rule.onNodeWithContentDescription("Редактор тексту").assertExists()
     }
+
+    @Test fun closing_untouched_notepad_creates_no_file() {
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.onAllNodesWithText("Блокнот").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithText("Блокнот").performClick()
+        rule.waitUntil(timeoutMillis = 10_000) {
+            rule.onAllNodesWithContentDescription("Редактор тексту").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithContentDescription("Закрити").performClick()
+        rule.onNodeWithText("Мої файли").performClick()
+        rule.onNodeWithText("Ця папка порожня").assertExists()
+        rule.onNodeWithText("Новий текстовий документ.txt").assertDoesNotExist()
+    }
 }
