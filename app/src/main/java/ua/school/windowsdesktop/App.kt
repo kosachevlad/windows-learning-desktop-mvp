@@ -55,7 +55,12 @@ fun WindowsLearningDesktopApp(
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
     MaterialTheme {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Spacebar) {
+                onKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
+            }
+            false
+        }) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val current = screen) {
                     AppScreen.Desktop -> DesktopScreen(

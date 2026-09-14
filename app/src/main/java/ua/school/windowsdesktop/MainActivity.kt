@@ -1,7 +1,6 @@
 package ua.school.windowsdesktop
 
 import android.os.Bundle
-import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -52,13 +51,6 @@ class MainActivity : ComponentActivity() {
     private fun changeKeyboardLanguage(language: String) {
         keyboardLanguage = language
         getSharedPreferences("settings", MODE_PRIVATE).edit().putString("keyboard_language", language).apply()
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (event.isCtrlPressed && keyCode == KeyEvent.KEYCODE_SPACE) {
-            changeKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
-        }
-        return super.onKeyDown(keyCode, event)
     }
 
     override fun onDestroy() {
