@@ -1,6 +1,10 @@
 package ua.school.windowsdesktop
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -30,8 +34,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        CrashReporter.install(applicationContext)
-        crashReport = CrashReporter.read(applicationContext)
+        if (BuildConfig.DEBUG) {
+            CrashReporter.install(applicationContext)
+            crashReport = CrashReporter.read(applicationContext)
+        }
         setContent {
             MaterialTheme {
                 when (val state = loadState) {
@@ -50,6 +56,11 @@ class MainActivity : ComponentActivity() {
                             CrashReporter.clear(applicationContext)
                             crashReport = null
                         }) { Text("Закрити звіт") } },
+                        dismissButton = { TextButton(onClick = {
+                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Звіт про збій", report))
+                            Toast.makeText(this@MainActivity, "Звіт скопійовано", Toast.LENGTH_SHORT).show()
+                        }) { Text("Копіювати повністю") } },
                     )
                 }
             }

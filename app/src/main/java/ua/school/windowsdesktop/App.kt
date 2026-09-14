@@ -605,15 +605,16 @@ private fun Modifier.dialogKeys(
 }
 
 @Composable private fun VerticalScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
-    if (state.maxValue <= 0) return
+    val maxScroll = state.maxValue
+    if (maxScroll <= 0) return
     BoxWithConstraints(modifier.fillMaxHeight().width(8.dp).background(Color(0x22000000))) {
         val viewportPx = constraints.maxHeight.toFloat()
-        val totalPx = viewportPx + state.maxValue
+        val totalPx = viewportPx + maxScroll
         val minimumPx = with(LocalDensity.current) { 32.dp.toPx() }
         val thumbPx = (viewportPx * viewportPx / totalPx).coerceAtLeast(minimumPx).coerceAtMost(viewportPx)
-        val offsetPx = (viewportPx - thumbPx) * state.value.toFloat() / state.maxValue.toFloat()
+        val offsetPx = (viewportPx - thumbPx) * state.value.coerceIn(0, maxScroll).toFloat() / maxScroll.toFloat()
         Box(
-            Modifier.offset { IntOffset(0, offsetPx.roundToInt()) }
+            Modifier.offset { IntOffset(0, if (offsetPx.isFinite()) offsetPx.roundToInt() else 0) }
                 .fillMaxWidth()
                 .height(with(LocalDensity.current) { thumbPx.toDp() })
                 .background(Color(0x99000000))
