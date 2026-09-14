@@ -486,7 +486,7 @@ fun WindowsLearningDesktopApp(
         else OutlinedTextField(
             text,
             { updated ->
-                if (keyboardLanguage == "unknown" && updated.length > text.length) {
+                if (updated.length > text.length) {
                     updated.lastOrNull { it.isLetter() }?.let { character ->
                         when {
                             character in 'А'..'я' || character == 'І' || character == 'і' || character == 'Ї' || character == 'ї' || character == 'Є' || character == 'є' || character == 'Ґ' || character == 'ґ' -> onKeyboardLanguage("uk")
