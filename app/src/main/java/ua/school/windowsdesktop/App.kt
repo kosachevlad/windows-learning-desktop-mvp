@@ -78,12 +78,13 @@ fun WindowsLearningDesktopApp(
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
-                        onKeyboardLanguage = onKeyboardLanguage)
+                        onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions)
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
-                        onError = { error = it })
+                        onError = { error = it }, showFileExtensions = showFileExtensions)
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
-                        onDesktop = { screen = AppScreen.Desktop }, onError = { error = it })
+                        onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
+                        showFileExtensions = showFileExtensions)
                 }
             }
             Taskbar(
@@ -195,7 +196,11 @@ fun WindowsLearningDesktopApp(
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
     fun paste() { scope.launch { try { repository.paste(folderId); selectedId = null } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun submitCreate(kind: FileKind) { if (newName.isBlank()) return else scope.launch { try {
-        val created = if (kind == FileKind.FOLDER) repository.createFolder(newName, folderId) else repository.createText(newName, folderId)
+        val created = when (kind) {
+            FileKind.FOLDER -> repository.createFolder(newName, folderId)
+            FileKind.TEXT -> repository.createText(newName, folderId)
+            FileKind.PAINT -> repository.createPaint(newName, folderId, blankPaintPng())
+        }
         selectedId = created.id
         pendingRevealId = created.id
         createKind = null
@@ -326,6 +331,14 @@ fun WindowsLearningDesktopApp(
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text(stringResource(R.string.new_bitmap_image)) },
+                            onClick = {
+                                backgroundMenuPosition = null
+                                createKind = FileKind.PAINT
+                                newName = ""
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(R.string.paste)) },
                             enabled = clipboardReady,
                             onClick = {
@@ -342,7 +355,11 @@ fun WindowsLearningDesktopApp(
     createKind?.let { kind -> AlertDialog(
         modifier = Modifier.dialogKeys(newName.isNotBlank(), { submitCreate(kind) }, { createKind = null }),
         onDismissRequest = { createKind = null },
-        title = { Text(if (kind == FileKind.FOLDER) stringResource(R.string.new_folder) else stringResource(R.string.new_text_document)) },
+        title = { Text(when (kind) {
+            FileKind.FOLDER -> stringResource(R.string.new_folder)
+            FileKind.TEXT -> stringResource(R.string.new_text_document)
+            FileKind.PAINT -> stringResource(R.string.new_bitmap_image)
+        }) },
         text = { OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
         confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { submitCreate(kind) }) { Text(stringResource(R.string.create)) } },
         dismissButton = { TextButton(onClick = { createKind = null }) { Text(stringResource(R.string.cancel)) } }) }
@@ -354,7 +371,7 @@ fun WindowsLearningDesktopApp(
         confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { submitRename(target) }) { Text(stringResource(R.string.rename)) } },
         dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(stringResource(R.string.cancel)) } }) }
     deleteTarget?.let { target -> AlertDialog(onDismissRequest = { deleteTarget = null },
-        title = { Text(stringResource(R.string.delete)) }, text = { Text(stringResource(R.string.delete_question, target.name)) },
+        title = { Text(stringResource(R.string.delete)) }, text = { Text(stringResource(R.string.delete_question, displayName(target, showFileExtensions))) },
         confirmButton = { TextButton(onClick = { scope.launch { try {
             repository.moveToTrash(target.id); selectedId = null; deleteTarget = null
         } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.delete)) } },
@@ -428,6 +445,7 @@ fun WindowsLearningDesktopApp(
 
 @Composable private fun TrashScreen(
     repository: LearningFileRepository, nodes: List<FileNode>, onDesktop: () -> Unit, onError: (String) -> Unit,
+    showFileExtensions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val deleted = nodes.filter { it.trashedAt != null }.sortedByDescending { it.trashedAt }
@@ -450,7 +468,7 @@ fun WindowsLearningDesktopApp(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Image(painterResource(fileIcon(node)), null, Modifier.size(28.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(node.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(displayName(node, showFileExtensions), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         TextButton(onClick = { scope.launch { try { repository.restore(node.id) } catch (failure: Exception) { onError(errorMessage(failure)) } } }) {
                             Text(stringResource(R.string.restore))
                         }
@@ -465,7 +483,7 @@ fun WindowsLearningDesktopApp(
     permanentTarget?.let { target -> AlertDialog(
         onDismissRequest = { permanentTarget = null },
         title = { Text(stringResource(R.string.delete_permanently)) },
-        text = { Text(stringResource(R.string.delete_permanently_question, target.name)) },
+        text = { Text(stringResource(R.string.delete_permanently_question, displayName(target, showFileExtensions))) },
         confirmButton = { TextButton(onClick = { scope.launch { try {
             repository.deletePermanently(target.id); permanentTarget = null
         } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.delete_permanently)) } },
@@ -486,6 +504,7 @@ fun WindowsLearningDesktopApp(
     repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>,
     onClose: () -> Unit, onError: (String) -> Unit,
     keyboardLanguage: String, onKeyboardLanguage: (String) -> Unit,
+    showFileExtensions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     var currentFileId by remember(file?.id) { mutableStateOf(file?.id) }
@@ -506,7 +525,7 @@ fun WindowsLearningDesktopApp(
         saved = text; after()
     } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun requestClose() { if (dirty) closeRequested = true else onClose() }
-    fun requestSaveAs() { saveAsName = currentName; saveAsRequested = true }
+    fun requestSaveAs() { saveAsName = displayFileName(currentName, FileKind.TEXT, showFileExtensions); saveAsRequested = true }
     fun submitSaveAs() { if (saveAsName.isBlank()) return else scope.launch { try {
         val created = repository.createText(saveAsName, parentId, text)
         currentFileId = created.id; currentName = created.name; saved = text; saveAsRequested = false
@@ -522,7 +541,7 @@ fun WindowsLearningDesktopApp(
             else -> false
         }
     }) {
-        WindowTitle(currentName + if (dirty) " *" else "", ::requestClose)
+        WindowTitle(displayFileName(currentName, FileKind.TEXT, showFileExtensions) + if (dirty) " *" else "", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) {
             TextButton(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
             TextButton(onClick = ::requestSaveAs, enabled = loaded) { Text(stringResource(R.string.save_as)) }
@@ -569,10 +588,14 @@ private fun nextUntitledName(nodes: Collection<FileNode>): String {
     while (true) { val candidate = if (number == 1) "Новий текстовий документ.txt" else "Новий текстовий документ ($number).txt"; if (candidate.lowercase() !in names) return candidate; number++ }
 }
 
-private fun displayName(node: FileNode, showFileExtensions: Boolean): String =
-    if (!showFileExtensions && node.kind == FileKind.TEXT && node.name.endsWith(".txt", ignoreCase = true)) {
-        node.name.dropLast(4)
-    } else node.name
+internal fun displayName(node: FileNode, showFileExtensions: Boolean): String =
+    displayFileName(node.name, node.kind, showFileExtensions)
+
+internal fun displayFileName(name: String, kind: FileKind, showFileExtensions: Boolean): String {
+    if (showFileExtensions || kind == FileKind.FOLDER) return name
+    val extension = when (kind) { FileKind.TEXT -> ".txt"; FileKind.PAINT -> ".png"; FileKind.FOLDER -> "" }
+    return if (name.endsWith(extension, ignoreCase = true)) name.dropLast(extension.length) else name
+}
 
 private fun fileIcon(node: FileNode): Int = when (node.kind) {
     FileKind.FOLDER -> R.drawable.folder_icon

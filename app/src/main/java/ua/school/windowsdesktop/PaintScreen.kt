@@ -53,6 +53,7 @@ fun PaintScreen(
     nodes: Collection<FileNode>,
     onClose: () -> Unit,
     onError: (String) -> Unit,
+    showFileExtensions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     var currentId by remember(file?.id) { mutableStateOf(file?.id) }
@@ -109,7 +110,7 @@ fun PaintScreen(
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).onPreviewKeyEvent { event ->
         if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S) { save(); true } else false
     }) {
-        WindowTitle(currentName + if (dirty) " *" else "", ::requestClose)
+        WindowTitle(displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions) + if (dirty) " *" else "", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { tool = PaintTool.PENCIL }
             ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { tool = PaintTool.ERASER }
@@ -123,7 +124,7 @@ fun PaintScreen(
             listOf(Color.Black, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFFFFC107)).forEach { color ->
                 Box(Modifier.padding(4.dp).size(28.dp).background(color).border(if (selectedColor == color.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = color.toArgb() })
             }
-            TextButton(onClick = { saveAsName = currentName; saveAsRequested = true }) { Text(stringResource(R.string.save_as)) }
+            TextButton(onClick = { saveAsName = displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions); saveAsRequested = true }) { Text(stringResource(R.string.save_as)) }
             Button(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
         }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -193,6 +194,11 @@ private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>):
             PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
         }
     }
+    return ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
+}
+
+internal fun blankPaintPng(): ByteArray {
+    val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888).apply { eraseColor(AndroidColor.WHITE) }
     return ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
 }
 

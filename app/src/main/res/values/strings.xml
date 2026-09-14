@@ -4,6 +4,7 @@
     <string name="notepad">Блокнот</string><string name="recycle_bin">Кошик</string>
     <string name="back">Назад</string><string name="new_folder">Нова папка</string>
     <string name="new_text_document">Новий текстовий документ</string>
+    <string name="new_bitmap_image">Новий точковий рисунок</string>
     <string name="folder_empty">Ця папка порожня</string>
     <string name="name">Ім’я</string><string name="modified">Дата змінення</string>
     <string name="type">Тип</string><string name="size">Розмір</string>
