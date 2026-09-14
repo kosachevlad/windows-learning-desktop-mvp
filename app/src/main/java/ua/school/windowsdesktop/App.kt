@@ -175,6 +175,13 @@ fun WindowsLearningDesktopApp(
     fun openSelected() { selected?.let(::openNode) }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
     fun paste() { scope.launch { try { repository.paste(folderId); selectedId = null } catch (failure: Exception) { onError(errorMessage(failure)) } } }
+    fun submitCreate(kind: FileKind) { if (newName.isBlank()) return else scope.launch { try {
+        if (kind == FileKind.FOLDER) repository.createFolder(newName, folderId) else repository.createText(newName, folderId)
+        createKind = null
+    } catch (failure: Exception) { onError(errorMessage(failure)) } } }
+    fun submitRename(target: FileNode) { if (newName.isBlank()) return else scope.launch { try {
+        repository.rename(target.id, newName); renameTarget = null
+    } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun goBack() { current?.parentId?.let(onFolder) ?: onDesktop() }
     BackHandler { goBack() }
     LaunchedEffect(folderId) { focusRequester.requestFocus() }
@@ -301,22 +308,19 @@ fun WindowsLearningDesktopApp(
             VerticalScrollIndicator(explorerScroll, Modifier.align(Alignment.CenterEnd))
         }
     }
-    createKind?.let { kind -> AlertDialog(onDismissRequest = { createKind = null },
+    createKind?.let { kind -> AlertDialog(
+        modifier = Modifier.dialogKeys(newName.isNotBlank(), { submitCreate(kind) }, { createKind = null }),
+        onDismissRequest = { createKind = null },
         title = { Text(if (kind == FileKind.FOLDER) stringResource(R.string.new_folder) else stringResource(R.string.new_text_document)) },
         text = { OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
-        confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = {
-            scope.launch { try {
-                if (kind == FileKind.FOLDER) repository.createFolder(newName, folderId) else repository.createText(newName, folderId)
-                createKind = null
-            } catch (failure: Exception) { onError(errorMessage(failure)) } }
-        }) { Text(stringResource(R.string.create)) } },
+        confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { submitCreate(kind) }) { Text(stringResource(R.string.create)) } },
         dismissButton = { TextButton(onClick = { createKind = null }) { Text(stringResource(R.string.cancel)) } }) }
-    renameTarget?.let { target -> AlertDialog(onDismissRequest = { renameTarget = null },
+    renameTarget?.let { target -> AlertDialog(
+        modifier = Modifier.dialogKeys(newName.isNotBlank(), { submitRename(target) }, { renameTarget = null }),
+        onDismissRequest = { renameTarget = null },
         title = { Text(stringResource(R.string.rename)) },
         text = { OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
-        confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { scope.launch { try {
-            repository.rename(target.id, newName); renameTarget = null
-        } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.rename)) } },
+        confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { submitRename(target) }) { Text(stringResource(R.string.rename)) } },
         dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(stringResource(R.string.cancel)) } }) }
     deleteTarget?.let { target -> AlertDialog(onDismissRequest = { deleteTarget = null },
         title = { Text(stringResource(R.string.delete)) }, text = { Text(stringResource(R.string.delete_question, target.name)) },
@@ -466,6 +470,10 @@ fun WindowsLearningDesktopApp(
     } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun requestClose() { if (dirty) closeRequested = true else onClose() }
     fun requestSaveAs() { saveAsName = currentName; saveAsRequested = true }
+    fun submitSaveAs() { if (saveAsName.isBlank()) return else scope.launch { try {
+        val created = repository.createText(saveAsName, parentId, text)
+        currentFileId = created.id; currentName = created.name; saved = text; saveAsRequested = false
+    } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color.White).onPreviewKeyEvent { event ->
         when {
@@ -504,16 +512,11 @@ fun WindowsLearningDesktopApp(
         confirmButton = { TextButton(onClick = { save(onClose) }) { Text(stringResource(R.string.save)) } },
         dismissButton = { Row { TextButton(onClick = onClose) { Text(stringResource(R.string.dont_save)) }; TextButton(onClick = { closeRequested = false }) { Text(stringResource(R.string.cancel)) } } })
     if (saveAsRequested) AlertDialog(
+        modifier = Modifier.dialogKeys(saveAsName.isNotBlank(), ::submitSaveAs) { saveAsRequested = false },
         onDismissRequest = { saveAsRequested = false },
         title = { Text(stringResource(R.string.save_as)) },
         text = { OutlinedTextField(saveAsName, { saveAsName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
-        confirmButton = { TextButton(enabled = saveAsName.isNotBlank(), onClick = { scope.launch { try {
-            val created = repository.createText(saveAsName, parentId, text)
-            currentFileId = created.id
-            currentName = created.name
-            saved = text
-            saveAsRequested = false
-        } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.save)) } },
+        confirmButton = { TextButton(enabled = saveAsName.isNotBlank(), onClick = ::submitSaveAs) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = { saveAsRequested = false }) { Text(stringResource(R.string.cancel)) } },
     )
 }
@@ -550,6 +553,18 @@ private fun Modifier.onSecondaryClick(
             }
         }
     }
+
+private fun Modifier.dialogKeys(
+    confirmEnabled: Boolean = true,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) false else when (event.key) {
+        Key.Enter -> { if (confirmEnabled) onConfirm(); true }
+        Key.Escape -> { onCancel(); true }
+        else -> false
+    }
+}
 
 @Composable private fun VerticalScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
     if (state.maxValue <= 0) return
