@@ -33,6 +33,7 @@ import kotlin.math.roundToInt
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.*
@@ -48,19 +49,13 @@ private sealed interface AppScreen {
 fun WindowsLearningDesktopApp(
     repository: LearningFileRepository,
     keyboardLanguage: String = "uk",
-    onKeyboardLanguage: (String) -> Unit = {},
 ) {
     val snapshot by repository.snapshots.collectAsState()
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Desktop) }
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
     MaterialTheme {
-        Column(Modifier.fillMaxSize().onPreviewKeyEvent { event ->
-            if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Spacebar) {
-                onKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
-            }
-            false
-        }) {
+        Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val current = screen) {
                     AppScreen.Desktop -> DesktopScreen(
@@ -81,7 +76,6 @@ fun WindowsLearningDesktopApp(
             }
             Taskbar(
                 keyboardLanguage = keyboardLanguage,
-                onKeyboardLanguage = onKeyboardLanguage,
                 onDesktop = { screen = AppScreen.Desktop },
                 onFiles = { screen = AppScreen.Explorer() },
                 onNotepad = { screen = AppScreen.Notepad() },
@@ -111,12 +105,10 @@ fun WindowsLearningDesktopApp(
 
 @Composable private fun Taskbar(
     keyboardLanguage: String,
-    onKeyboardLanguage: (String) -> Unit,
     onDesktop: () -> Unit,
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
 ) {
-    var languageMenu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -127,15 +119,15 @@ fun WindowsLearningDesktopApp(
         TextButton(onClick = onNotepad) { Text("▤", color = Color.White) }
         TextButton(onClick = {}) { Text("◩", color = Color.White) }
         Spacer(Modifier.weight(1f))
-        Box {
-            TextButton(onClick = { languageMenu = true }) {
-                Text(if (keyboardLanguage == "en") "ENG" else "УКР", color = Color.White)
-            }
-            DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
-                DropdownMenuItem(text = { Text("Українська") }, onClick = { languageMenu = false; onKeyboardLanguage("uk") })
-                DropdownMenuItem(text = { Text("English") }, onClick = { languageMenu = false; onKeyboardLanguage("en") })
-            }
-        }
+        Text(
+            when (keyboardLanguage) {
+                "uk" -> "УКР"
+                "en" -> "ENG"
+                else -> keyboardLanguage.uppercase(Locale.ROOT).take(2)
+            },
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
         Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
