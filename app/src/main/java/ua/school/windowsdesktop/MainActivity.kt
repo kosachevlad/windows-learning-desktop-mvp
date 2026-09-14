@@ -1,6 +1,7 @@
 package ua.school.windowsdesktop
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -21,14 +22,16 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 class MainActivity : ComponentActivity() {
     private var repository: LearningFileRepository? = null
     private var loadState by mutableStateOf<LoadState>(LoadState.Loading)
+    private var keyboardLanguage by mutableStateOf("uk")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        keyboardLanguage = getSharedPreferences("settings", MODE_PRIVATE).getString("keyboard_language", "uk") ?: "uk"
         setContent {
             MaterialTheme {
                 when (val state = loadState) {
                     LoadState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    is LoadState.Ready -> WindowsLearningDesktopApp(state.repository)
+                    is LoadState.Ready -> WindowsLearningDesktopApp(state.repository, keyboardLanguage, ::changeKeyboardLanguage)
                     is LoadState.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(getString(R.string.storage_open_failed, state.message))
                     }
@@ -44,6 +47,18 @@ class MainActivity : ComponentActivity() {
                 loadState = LoadState.Failed(failure.message ?: getString(R.string.error_unknown))
             }
         }
+    }
+
+    private fun changeKeyboardLanguage(language: String) {
+        keyboardLanguage = language
+        getSharedPreferences("settings", MODE_PRIVATE).edit().putString("keyboard_language", language).apply()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (event.isCtrlPressed && keyCode == KeyEvent.KEYCODE_SPACE) {
+            changeKeyboardLanguage(if (keyboardLanguage == "uk") "en" else "uk")
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onDestroy() {

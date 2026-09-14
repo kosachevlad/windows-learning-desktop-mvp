@@ -42,7 +42,11 @@ private sealed interface AppScreen {
 }
 
 @Composable
-fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
+fun WindowsLearningDesktopApp(
+    repository: LearningFileRepository,
+    keyboardLanguage: String = "uk",
+    onKeyboardLanguage: (String) -> Unit = {},
+) {
     val snapshot by repository.snapshots.collectAsState()
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Desktop) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -53,6 +57,8 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
                 onFiles = { screen = AppScreen.Explorer() },
                 onNotepad = { screen = AppScreen.Notepad() },
                 onTrash = { screen = AppScreen.Trash },
+                keyboardLanguage = keyboardLanguage,
+                onKeyboardLanguage = onKeyboardLanguage,
             )
             is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
                 onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
@@ -70,7 +76,14 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     }
 }
 
-@Composable private fun DesktopScreen(onFiles: () -> Unit, onNotepad: () -> Unit, onTrash: () -> Unit) {
+@Composable private fun DesktopScreen(
+    onFiles: () -> Unit,
+    onNotepad: () -> Unit,
+    onTrash: () -> Unit,
+    keyboardLanguage: String,
+    onKeyboardLanguage: (String) -> Unit,
+) {
+    var languageMenu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Color(0xFF0078D7)).semantics { contentDescription = "Робочий стіл" },
         verticalArrangement = Arrangement.SpaceBetween) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -82,7 +95,18 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
         }
         Row(Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(16.dp, 10.dp), Arrangement.SpaceBetween) {
             Text("⊞    ⌕    ▣    □    ▤    ◩", color = Color.White)
-            Text("УКР    ${SimpleDateFormat("HH:mm").format(Date())}", color = Color.White)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    TextButton(onClick = { languageMenu = true }) {
+                        Text(if (keyboardLanguage == "en") "ENG" else "УКР", color = Color.White)
+                    }
+                    DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+                        DropdownMenuItem(text = { Text("Українська") }, onClick = { languageMenu = false; onKeyboardLanguage("uk") })
+                        DropdownMenuItem(text = { Text("English") }, onClick = { languageMenu = false; onKeyboardLanguage("en") })
+                    }
+                }
+                Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White)
+            }
         }
     }
 }
