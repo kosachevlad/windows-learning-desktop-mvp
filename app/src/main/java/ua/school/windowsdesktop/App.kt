@@ -63,10 +63,17 @@ fun WindowsLearningDesktopApp(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val current = screen) {
                     AppScreen.Desktop -> DesktopScreen(
+                        repository = repository,
+                        nodes = snapshot.nodes.values.toList(),
                         onFiles = { screen = AppScreen.Explorer() },
                         onNotepad = { screen = AppScreen.Notepad() },
                         onTrash = { screen = AppScreen.Trash },
                         onPaint = { screen = AppScreen.Paint() },
+                        onFolder = { screen = AppScreen.Explorer(it) },
+                        onText = { screen = AppScreen.Notepad(it) },
+                        onPaintFile = { screen = AppScreen.Paint(it) },
+                        onError = { error = it },
+                        showFileExtensions = showFileExtensions,
                         trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
                     )
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
@@ -99,24 +106,6 @@ fun WindowsLearningDesktopApp(
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
             title = { Text(stringResource(R.string.error_title)) }, text = { Text(message) },
             confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.ok)) } }) }
-    }
-}
-
-@Composable private fun DesktopScreen(
-    onFiles: () -> Unit,
-    onNotepad: () -> Unit,
-    onTrash: () -> Unit,
-    onPaint: () -> Unit,
-    trashNotEmpty: Boolean,
-) {
-    Column(Modifier.fillMaxSize().background(Color(0xFF0078D7)).semantics { contentDescription = "Робочий стіл" }) {
-        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            DesktopItem(R.drawable.this_computer, stringResource(R.string.this_pc), onFiles)
-            DesktopItem(R.drawable.my_files, stringResource(R.string.my_files), onFiles)
-            DesktopItem(R.drawable.notepad, stringResource(R.string.notepad), onNotepad)
-            DesktopItem(R.drawable.paint, "Paint", onPaint)
-            DesktopItem(if (trashNotEmpty) R.drawable.full_bin else R.drawable.empty_bin, stringResource(R.string.recycle_bin), onTrash)
-        }
     }
 }
 
@@ -156,14 +145,6 @@ fun WindowsLearningDesktopApp(
             }
         }
         Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
-    }
-}
-
-@Composable private fun DesktopItem(icon: Int, label: String, action: () -> Unit) {
-    Row(Modifier.width(190.dp).clickable(onClick = action).padding(vertical = 9.dp).semantics { contentDescription = label },
-        verticalAlignment = Alignment.CenterVertically) {
-        Image(painterResource(icon), label, Modifier.size(52.dp))
-        Spacer(Modifier.width(12.dp)); Text(label, color = Color.White)
     }
 }
 
@@ -597,13 +578,13 @@ internal fun displayFileName(name: String, kind: FileKind, showFileExtensions: B
     return if (name.endsWith(extension, ignoreCase = true)) name.dropLast(extension.length) else name
 }
 
-private fun fileIcon(node: FileNode): Int = when (node.kind) {
+internal fun fileIcon(node: FileNode): Int = when (node.kind) {
     FileKind.FOLDER -> R.drawable.folder_icon
     FileKind.TEXT -> R.drawable.text_icon
     FileKind.PAINT -> R.drawable.image_icon
 }
 
-private fun Modifier.onSecondaryClick(
+internal fun Modifier.onSecondaryClick(
     pass: PointerEventPass = PointerEventPass.Main,
     action: (Offset) -> Unit,
 ): Modifier =
