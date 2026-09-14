@@ -2,7 +2,6 @@ package ua.school.windowsdesktop
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,7 +11,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -443,7 +441,6 @@ fun WindowsLearningDesktopApp(
     var loaded by remember(file?.id) { mutableStateOf(file == null) }; var closeRequested by remember { mutableStateOf(false) }
     var saveAsRequested by remember { mutableStateOf(false) }
     var saveAsName by remember { mutableStateOf("") }
-    val editorScroll = rememberScrollState()
     val parentId = file?.parentId ?: FileOperations.ROOT_ID
     val dirty = loaded && text != saved
     LaunchedEffect(file?.id) { if (file != null) try { repository.readText(file.id).let { text = it; saved = it; loaded = true } } catch (failure: Exception) { onError(errorMessage(failure)); onClose() } }
@@ -467,19 +464,12 @@ fun WindowsLearningDesktopApp(
             TextButton(onClick = ::requestSaveAs, enabled = loaded) { Text(stringResource(R.string.save_as)) }
         }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp).border(1.dp, Color.Gray)) {
-            val editorMinHeight = maxHeight
-            Box(Modifier.fillMaxSize().verticalScroll(editorScroll)) {
-                BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = editorMinHeight).padding(12.dp)
-                        .semantics { contentDescription = "Редактор тексту" },
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            VerticalScrollIndicator(editorScroll, Modifier.align(Alignment.CenterEnd))
-        }
+        else OutlinedTextField(
+            text,
+            { text = it },
+            Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" },
+            textStyle = MaterialTheme.typography.bodyLarge,
+        )
     }
     if (closeRequested) AlertDialog(onDismissRequest = { closeRequested = false }, title = { Text(stringResource(R.string.save_changes_question)) },
         confirmButton = { TextButton(onClick = { save(onClose) }) { Text(stringResource(R.string.save)) } },
