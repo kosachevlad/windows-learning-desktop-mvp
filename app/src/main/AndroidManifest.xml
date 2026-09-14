@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="false" android:label="Windows Learning Desktop" android:theme="@style/Theme.WindowsLearningDesktop">
+    <application android:allowBackup="false" android:label="@string/app_name" android:theme="@style/Theme.WindowsLearningDesktop">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Windows Learning Desktop</string>
+    <string name="this_pc">Цей ПК</string><string name="my_files">Мої файли</string>
+    <string name="notepad">Блокнот</string><string name="recycle_bin">Кошик</string>
+    <string name="back">Назад</string><string name="new_folder">Нова папка</string>
+    <string name="new_text_document">Новий текстовий документ</string>
+    <string name="folder_empty">Ця папка порожня</string>
+    <string name="name">Ім’я</string><string name="modified">Дата змінення</string>
+    <string name="type">Тип</string><string name="size">Розмір</string>
+    <string name="file_folder">Папка</string><string name="text_document">Текстовий документ</string>
+    <string name="paint_image">Малюнок PNG</string><string name="create">Створити</string>
+    <string name="save">Зберегти</string><string name="dont_save">Не зберігати</string>
+    <string name="cancel">Скасувати</string><string name="ok">Гаразд</string>
+    <string name="error_title">Помилка</string>
+    <string name="error_name_conflict">Об’єкт із таким ім’ям уже існує.</string>
+    <string name="error_invalid_name">Це ім’я не можна використати.</string>
+    <string name="error_unknown">Невідома помилка</string>
+    <string name="save_changes_question">Зберегти зміни?</string>
+    <string name="storage_open_failed">Не вдалося відкрити навчальні файли: %1$s</string>
+</resources>
