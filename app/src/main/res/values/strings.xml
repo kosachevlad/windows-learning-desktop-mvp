@@ -28,4 +28,6 @@
     <string name="storage_open_failed">Не вдалося відкрити навчальні файли: %1$s</string>
     <string name="pencil">Олівець</string><string name="eraser">Гумка</string>
     <string name="clear_canvas">Очистити</string><string name="new_drawing">Новий малюнок</string>
+    <string name="line">Лінія</string><string name="rectangle">Прямокутник</string><string name="oval">Овал</string>
+    <string name="undo">Скасувати</string><string name="redo">Повторити</string><string name="thickness">Товщина</string>
 </resources>
