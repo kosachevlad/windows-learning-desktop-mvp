@@ -277,4 +277,34 @@ class FileOperationsTest {
         assertEquals("restored.txt", restored.name)
         assertEquals("original", files.readText(restored.id))
     }
+
+    @Test fun permanent_delete_removes_trashed_subtree_and_content() {
+        val folder = files.createFolder("A", root)
+        val nested = files.createText("a.txt", folder.id, "gone")
+        files.moveToTrash(folder.id)
+        files.deletePermanently(folder.id)
+        assertFalse(files.snapshot().nodes.containsKey(folder.id))
+        assertFalse(files.snapshot().nodes.containsKey(nested.id))
+        assertFalse(files.snapshot().contents.containsKey(nested.id))
+        assertTrue(files.trash().isEmpty())
+    }
+
+    @Test fun empty_trash_removes_all_hidden_nodes_and_keeps_live_files() {
+        val live = files.createText("live.txt", root, "keep")
+        val folder = files.createFolder("A", root)
+        val nested = files.createText("nested.txt", folder.id, "gone")
+        val deleted = files.createText("deleted.txt", root, "gone too")
+        files.moveToTrash(folder.id)
+        files.moveToTrash(deleted.id)
+        assertEquals(3, files.emptyTrash())
+        assertEquals("keep", files.readText(live.id))
+        assertFalse(files.snapshot().nodes.containsKey(nested.id))
+        assertTrue(files.trash().isEmpty())
+        assertEquals(0, files.emptyTrash())
+    }
+
+    @Test fun live_file_cannot_be_deleted_permanently() {
+        val live = files.createText("live.txt", root)
+        expectError(FileError.NOT_IN_TRASH) { files.deletePermanently(live.id) }
+    }
 }

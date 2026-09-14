@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -100,14 +101,16 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     var selectedId by remember(folderId) { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<FileNode?>(null) }
     var deleteTarget by remember { mutableStateOf<FileNode?>(null) }
+    var backgroundMenu by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val current = nodes.firstOrNull { it.id == folderId }
     val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }.sortedBy { it.name.lowercase() }
     val selected = children.firstOrNull { it.id == selectedId }
-    fun openSelected() { selected?.let { node -> when (node.kind) {
+    fun openNode(node: FileNode) { when (node.kind) {
         FileKind.FOLDER -> onFolder(node.id); FileKind.TEXT -> onText(node.id)
         FileKind.PAINT -> onError("Paint буде доступний у наступному етапі")
-    } } }
+    } }
+    fun openSelected() { selected?.let(::openNode) }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
     fun paste() { scope.launch { try { repository.paste(folderId); selectedId = null } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun goBack() { current?.parentId?.let(onFolder) ?: onDesktop() }
@@ -138,10 +141,23 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
             Spacer(Modifier.width(8.dp))
             Button(onClick = { createKind = FileKind.TEXT; newName = "" }) { Text(stringResource(R.string.new_text_document)) }
         }
-        Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            FileHeader()
-            if (children.isEmpty()) Text(stringResource(R.string.folder_empty), Modifier.padding(24.dp), color = Color.DarkGray)
-            children.forEach { node -> FileRow(node, selected = node.id == selectedId) { selectedId = node.id } }
+        Box(Modifier.fillMaxWidth().weight(1f).onSecondaryClick { selectedId = null; backgroundMenu = true }) {
+            Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                FileHeader()
+                if (children.isEmpty()) Text(stringResource(R.string.folder_empty), Modifier.padding(24.dp), color = Color.DarkGray)
+                children.forEach { node -> FileRow(
+                    node = node, selected = node.id == selectedId,
+                    select = { selectedId = node.id }, open = { selectedId = node.id; openNode(node) },
+                    copy = { selectedId = node.id; scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } },
+                    rename = { selectedId = node.id; renameTarget = node; newName = node.name },
+                    delete = { selectedId = node.id; deleteTarget = node },
+                ) }
+            }
+            DropdownMenu(expanded = backgroundMenu, onDismissRequest = { backgroundMenu = false }) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.new_folder)) }, onClick = { backgroundMenu = false; createKind = FileKind.FOLDER; newName = "" })
+                DropdownMenuItem(text = { Text(stringResource(R.string.new_text_document)) }, onClick = { backgroundMenu = false; createKind = FileKind.TEXT; newName = "" })
+                DropdownMenuItem(text = { Text(stringResource(R.string.paste)) }, enabled = clipboardReady, onClick = { backgroundMenu = false; paste() })
+            }
         }
     }
     createKind?.let { kind -> AlertDialog(onDismissRequest = { createKind = null },
@@ -175,14 +191,27 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
 }
 @Composable private fun RowScope.Header(text: String, width: Int) = Text(text, Modifier.width(width.dp).padding(horizontal = 12.dp), fontWeight = FontWeight.SemiBold)
 
-@Composable private fun FileRow(node: FileNode, selected: Boolean, select: () -> Unit) {
+@Composable private fun FileRow(
+    node: FileNode, selected: Boolean, select: () -> Unit, open: () -> Unit,
+    copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
+) {
     val type = when (node.kind) { FileKind.FOLDER -> stringResource(R.string.file_folder); FileKind.TEXT -> stringResource(R.string.text_document); FileKind.PAINT -> stringResource(R.string.paint_image) }
-    Row(Modifier.width(760.dp).background(if (selected) Color(0xFFCDE8FF) else Color.Transparent).clickable(onClick = select).padding(vertical = 10.dp).semantics { contentDescription = node.name }) {
-        Text((if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name, Modifier.width(300.dp).padding(horizontal = 12.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(node.modifiedAt)), Modifier.width(180.dp).padding(horizontal = 12.dp), maxLines = 1)
-        Text(type, Modifier.width(160.dp).padding(horizontal = 12.dp), maxLines = 1)
-        Text(if (node.kind == FileKind.FOLDER) "" else "${node.sizeBytes} B", Modifier.width(100.dp).padding(horizontal = 12.dp), maxLines = 1)
-    }; HorizontalDivider(color = Color(0xFFE8E8E8))
+    var menu by remember { mutableStateOf(false) }
+    Box(Modifier.width(760.dp).onSecondaryClick { select(); menu = true }) {
+        Row(Modifier.width(760.dp).background(if (selected) Color(0xFFCDE8FF) else Color.Transparent).clickable(onClick = select).padding(vertical = 10.dp).semantics { contentDescription = node.name }) {
+            Text((if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name, Modifier.width(300.dp).padding(horizontal = 12.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(node.modifiedAt)), Modifier.width(180.dp).padding(horizontal = 12.dp), maxLines = 1)
+            Text(type, Modifier.width(160.dp).padding(horizontal = 12.dp), maxLines = 1)
+            Text(if (node.kind == FileKind.FOLDER) "" else "${node.sizeBytes} B", Modifier.width(100.dp).padding(horizontal = 12.dp), maxLines = 1)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text(stringResource(R.string.open)) }, onClick = { menu = false; open() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { menu = false; copy() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menu = false; rename() })
+            DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; delete() })
+        }
+    }
+    HorizontalDivider(color = Color(0xFFE8E8E8))
 }
 
 @Composable private fun TrashScreen(
@@ -190,9 +219,16 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
 ) {
     val scope = rememberCoroutineScope()
     val deleted = nodes.filter { it.trashedAt != null }.sortedByDescending { it.trashedAt }
+    var permanentTarget by remember { mutableStateOf<FileNode?>(null) }
+    var confirmEmpty by remember { mutableStateOf(false) }
     BackHandler(onBack = onDesktop)
     Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4))) {
         WindowTitle(stringResource(R.string.recycle_bin), onDesktop)
+        Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 8.dp)) {
+            TextButton(onClick = { confirmEmpty = true }, enabled = deleted.isNotEmpty()) {
+                Text(stringResource(R.string.empty_recycle_bin))
+            }
+        }
         if (deleted.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.recycle_bin_empty)) }
         } else deleted.forEach { node ->
@@ -201,10 +237,29 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
                 TextButton(onClick = { scope.launch { try { repository.restore(node.id) } catch (failure: Exception) { onError(errorMessage(failure)) } } }) {
                     Text(stringResource(R.string.restore))
                 }
+                TextButton(onClick = { permanentTarget = node }) { Text(stringResource(R.string.delete_permanently)) }
             }
             HorizontalDivider(color = Color(0xFFE0E0E0))
         }
     }
+    permanentTarget?.let { target -> AlertDialog(
+        onDismissRequest = { permanentTarget = null },
+        title = { Text(stringResource(R.string.delete_permanently)) },
+        text = { Text(stringResource(R.string.delete_permanently_question, target.name)) },
+        confirmButton = { TextButton(onClick = { scope.launch { try {
+            repository.deletePermanently(target.id); permanentTarget = null
+        } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.delete_permanently)) } },
+        dismissButton = { TextButton(onClick = { permanentTarget = null }) { Text(stringResource(R.string.cancel)) } },
+    ) }
+    if (confirmEmpty) AlertDialog(
+        onDismissRequest = { confirmEmpty = false },
+        title = { Text(stringResource(R.string.empty_recycle_bin)) },
+        text = { Text(stringResource(R.string.empty_recycle_bin_question)) },
+        confirmButton = { TextButton(onClick = { scope.launch { try {
+            repository.emptyTrash(); confirmEmpty = false
+        } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.empty_recycle_bin)) } },
+        dismissButton = { TextButton(onClick = { confirmEmpty = false }) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 @Composable private fun NotepadScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onClose: () -> Unit, onError: (String) -> Unit) {
@@ -247,6 +302,18 @@ private fun nextUntitledName(nodes: Collection<FileNode>): String {
     val names = nodes.filter { it.parentId == FileOperations.ROOT_ID && it.trashedAt == null }.map { it.name.lowercase() }.toSet()
     var number = 1
     while (true) { val candidate = if (number == 1) "Новий текстовий документ.txt" else "Новий текстовий документ ($number).txt"; if (candidate.lowercase() !in names) return candidate; number++ }
+}
+
+private fun Modifier.onSecondaryClick(action: () -> Unit): Modifier = pointerInput(action) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent()
+            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                event.changes.forEach { it.consume() }
+                action()
+            }
+        }
+    }
 }
 
 private fun errorMessage(failure: Exception): String = when ((failure as? FileOperationException)?.code) {

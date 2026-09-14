@@ -127,6 +127,26 @@ class FileOperations(
         return publishNode(original.copy(parentId = parent, name = name, trashedAt = null, modifiedAt = clock()))
     }
 
+    /** Permanently remove one explicit Trash entry and its complete subtree. */
+    @Synchronized fun deletePermanently(id: String): FileNode {
+        protectRoot(id)
+        val original = node(id)
+        if (original.trashedAt == null) fail(FileError.NOT_IN_TRASH)
+        val ids = subtreeIds(id)
+        state = FileSystemSnapshot(state.nodes - ids, state.contents - ids)
+        if (clipboard.sourceId in ids) clipboard.clear()
+        return original
+    }
+
+    /** Remove every node hidden by Trash, including descendants of deleted folders. */
+    @Synchronized fun emptyTrash(): Int {
+        val ids = state.nodes.keys.filter { it != ROOT_ID && !isLive(it) }.toSet()
+        if (ids.isEmpty()) return 0
+        state = FileSystemSnapshot(state.nodes - ids, state.contents - ids)
+        if (clipboard.sourceId in ids) clipboard.clear()
+        return ids.size
+    }
+
     private fun create(rawName: String, parentId: String, kind: FileKind, content: FileContent?): FileNode {
         liveFolder(parentId)
         val name = FileNames.prepare(rawName, kind)
@@ -215,6 +235,18 @@ class FileOperations(
             val current = pending.removeFirst()
             result.add(current)
             byParent[current.id]?.forEach { pending.add(it) }
+        }
+        return result
+    }
+
+    private fun subtreeIds(rootId: String): Set<String> {
+        val byParent = state.nodes.values.groupBy { it.parentId }
+        val result = mutableSetOf<String>()
+        val pending = ArrayDeque<String>()
+        pending.add(rootId)
+        while (pending.isNotEmpty()) {
+            val current = pending.removeFirst()
+            if (result.add(current)) byParent[current]?.forEach { pending.add(it.id) }
         }
         return result
     }

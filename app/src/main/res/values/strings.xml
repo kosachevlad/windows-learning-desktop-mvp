@@ -12,6 +12,10 @@
     <string name="open">Відкрити</string><string name="copy">Копіювати</string>
     <string name="paste">Вставити</string><string name="rename">Перейменувати</string>
     <string name="delete">Видалити</string><string name="restore">Відновити</string>
+    <string name="delete_permanently">Видалити назавжди</string>
+    <string name="empty_recycle_bin">Очистити кошик</string>
+    <string name="delete_permanently_question">Назавжди видалити «%1$s»? Цю дію не можна скасувати.</string>
+    <string name="empty_recycle_bin_question">Назавжди видалити всі об’єкти з Кошика? Цю дію не можна скасувати.</string>
     <string name="delete_question">Перемістити «%1$s» до Кошика?</string>
     <string name="recycle_bin_empty">Кошик порожній</string>
     <string name="save">Зберегти</string><string name="dont_save">Не зберігати</string>

@@ -58,6 +58,8 @@ class LearningFileRepository private constructor(
     suspend fun paste(parentId: String, copyLabel: String = "копія"): FileNode = mutate { it.paste(parentId, copyLabel) }
     suspend fun moveToTrash(id: String): FileNode = mutate { it.moveToTrash(id) }
     suspend fun restore(id: String, newName: String? = null): FileNode = mutate { it.restore(id, newName) }
+    suspend fun deletePermanently(id: String): FileNode = mutate { it.deletePermanently(id) }
+    suspend fun emptyTrash(): Int = mutate { it.emptyTrash() }
 
     suspend fun close() = withContext(NonCancellable + Dispatchers.IO) {
         mutex.withLock {
@@ -75,7 +77,7 @@ class LearningFileRepository private constructor(
         }
     }
 
-    private suspend fun mutate(action: (FileOperations) -> FileNode): FileNode = withContext(Dispatchers.IO) {
+    private suspend fun <T> mutate(action: (FileOperations) -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock {
             check(!closed) { "Repository is closed" }
             val candidate = operations.fork()

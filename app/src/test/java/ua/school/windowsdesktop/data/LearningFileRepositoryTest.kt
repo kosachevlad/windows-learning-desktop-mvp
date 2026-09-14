@@ -353,4 +353,19 @@ class LearningFileRepositoryTest {
         failure(IOException::class.java) { open() }
         assertEquals("kept", blobs().single().readText())
     }
+
+    @Test fun permanent_delete_and_empty_trash_survive_reopen_and_collect_blobs(): Unit = runBlocking {
+        val repo = open()
+        val first = repo.createText("first.txt", root, "first")
+        val second = repo.createText("second.txt", root, "second")
+        repo.moveToTrash(first.id)
+        repo.moveToTrash(second.id)
+        repo.deletePermanently(first.id)
+        assertEquals(listOf(second.id), repo.trash().map { it.id })
+        assertEquals(1, repo.emptyTrash())
+        repo.close()
+        val reopened = open()
+        assertTrue(reopened.trash().isEmpty())
+        assertEquals(0, blobs().size)
+    }
 }
