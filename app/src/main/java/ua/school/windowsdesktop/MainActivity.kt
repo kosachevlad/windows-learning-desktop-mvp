@@ -5,9 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,9 +26,12 @@ class MainActivity : ComponentActivity() {
     private var repository: LearningFileRepository? = null
     private var loadState by mutableStateOf<LoadState>(LoadState.Loading)
     private var keyboardLanguage by mutableStateOf("unknown")
+    private var crashReport by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashReporter.install(applicationContext)
+        crashReport = CrashReporter.read(applicationContext)
         setContent {
             MaterialTheme {
                 when (val state = loadState) {
@@ -33,6 +40,17 @@ class MainActivity : ComponentActivity() {
                     is LoadState.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(getString(R.string.storage_open_failed, state.message))
                     }
+                }
+                crashReport?.let { report ->
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("Звіт про збій") },
+                        text = { Text(report, Modifier.verticalScroll(rememberScrollState())) },
+                        confirmButton = { TextButton(onClick = {
+                            CrashReporter.clear(applicationContext)
+                            crashReport = null
+                        }) { Text("Закрити звіт") } },
+                    )
                 }
             }
         }
