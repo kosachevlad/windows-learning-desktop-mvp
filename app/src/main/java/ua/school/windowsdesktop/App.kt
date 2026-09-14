@@ -54,6 +54,7 @@ fun WindowsLearningDesktopApp(
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Desktop) }
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
+    var showFileExtensions by remember { mutableStateOf(false) }
     MaterialTheme {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -66,7 +67,8 @@ fun WindowsLearningDesktopApp(
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
                         onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
-                        clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it })
+                        clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
+                        showFileExtensions = showFileExtensions)
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
@@ -155,6 +157,7 @@ fun WindowsLearningDesktopApp(
     repository: LearningFileRepository, folderId: String, nodes: List<FileNode>,
     onFolder: (String) -> Unit, onText: (String) -> Unit, onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
+    showFileExtensions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     var createKind by remember { mutableStateOf<FileKind?>(null) }
@@ -163,7 +166,9 @@ fun WindowsLearningDesktopApp(
     var renameTarget by remember { mutableStateOf<FileNode?>(null) }
     var deleteTarget by remember { mutableStateOf<FileNode?>(null) }
     var backgroundMenuPosition by remember { mutableStateOf<Offset?>(null) }
+    var pendingRevealId by remember { mutableStateOf<String?>(null) }
     val explorerScroll = rememberScrollState()
+    val density = LocalDensity.current
     val focusRequester = remember { FocusRequester() }
     val current = nodes.firstOrNull { it.id == folderId }
     val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }.sortedBy { it.name.lowercase() }
@@ -176,7 +181,9 @@ fun WindowsLearningDesktopApp(
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
     fun paste() { scope.launch { try { repository.paste(folderId); selectedId = null } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun submitCreate(kind: FileKind) { if (newName.isBlank()) return else scope.launch { try {
-        if (kind == FileKind.FOLDER) repository.createFolder(newName, folderId) else repository.createText(newName, folderId)
+        val created = if (kind == FileKind.FOLDER) repository.createFolder(newName, folderId) else repository.createText(newName, folderId)
+        selectedId = created.id
+        pendingRevealId = created.id
         createKind = null
     } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun submitRename(target: FileNode) { if (newName.isBlank()) return else scope.launch { try {
@@ -185,13 +192,22 @@ fun WindowsLearningDesktopApp(
     fun goBack() { current?.parentId?.let(onFolder) ?: onDesktop() }
     BackHandler { goBack() }
     LaunchedEffect(folderId) { focusRequester.requestFocus() }
+    LaunchedEffect(children.map { it.id }, pendingRevealId) {
+        val target = pendingRevealId ?: return@LaunchedEffect
+        val index = children.indexOfFirst { it.id == target }
+        if (index >= 0) {
+            val rowHeight = with(density) { 45.dp.toPx() }
+            explorerScroll.animateScrollTo((index * rowHeight).roundToInt())
+            pendingRevealId = null
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4)).focusRequester(focusRequester).focusable()
         .onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) false else when {
                 event.isCtrlPressed && event.key == Key.C -> { copySelected(); true }
                 event.isCtrlPressed && event.key == Key.V -> { if (clipboardReady) paste(); true }
-                event.key == Key.F2 && selected != null -> { renameTarget = selected; newName = selected.name; true }
+                event.key == Key.F2 && selected != null -> { renameTarget = selected; newName = displayName(selected, showFileExtensions); true }
                 event.key == Key.Delete && selected != null -> { deleteTarget = selected; true }
                 event.key == Key.Enter && selected != null -> { openSelected(); true }
                 else -> false
@@ -203,7 +219,7 @@ fun WindowsLearningDesktopApp(
             TextButton(onClick = ::openSelected, enabled = selected != null) { Text(stringResource(R.string.open)) }
             TextButton(onClick = ::copySelected, enabled = selected != null) { Text(stringResource(R.string.copy)) }
             TextButton(onClick = ::paste, enabled = clipboardReady) { Text(stringResource(R.string.paste)) }
-            TextButton(onClick = { selected?.let { renameTarget = it; newName = it.name } }, enabled = selected != null) { Text(stringResource(R.string.rename)) }
+            TextButton(onClick = { selected?.let { renameTarget = it; newName = displayName(it, showFileExtensions) } }, enabled = selected != null) { Text(stringResource(R.string.rename)) }
             TextButton(onClick = { selected?.let { deleteTarget = it } }, enabled = selected != null) { Text(stringResource(R.string.delete)) }
             Spacer(Modifier.weight(1f))
             Button(onClick = { createKind = FileKind.FOLDER; newName = "" }) { Text(stringResource(R.string.new_folder)) }
@@ -233,6 +249,7 @@ fun WindowsLearningDesktopApp(
                 children.forEach { node ->
                     FileRow(
                         node = node,
+                        showFileExtensions = showFileExtensions,
                         selected = node.id == selectedId,
                         select = { selectedId = node.id },
                         open = {
@@ -253,7 +270,7 @@ fun WindowsLearningDesktopApp(
                         rename = {
                             selectedId = node.id
                             renameTarget = node
-                            newName = node.name
+                            newName = displayName(node, showFileExtensions)
                         },
                         delete = {
                             selectedId = node.id
@@ -338,7 +355,7 @@ fun WindowsLearningDesktopApp(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun FileRow(
-    node: FileNode, selected: Boolean, select: () -> Unit, open: () -> Unit,
+    node: FileNode, showFileExtensions: Boolean, selected: Boolean, select: () -> Unit, open: () -> Unit,
     copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
 ) {
     val type = when (node.kind) {
@@ -346,13 +363,13 @@ fun WindowsLearningDesktopApp(
         FileKind.TEXT -> stringResource(R.string.text_document)
         FileKind.PAINT -> stringResource(R.string.paint_image)
     }
-    var menu by remember { mutableStateOf(false) }
+    var menuPosition by remember { mutableStateOf<Offset?>(null) }
     Box(
         Modifier
             .width(760.dp)
-            .onSecondaryClick(PointerEventPass.Initial) { _ ->
+            .onSecondaryClick(PointerEventPass.Initial) { position ->
                 select()
-                menu = true
+                menuPosition = position
             }
     ) {
         Row(
@@ -361,10 +378,10 @@ fun WindowsLearningDesktopApp(
                 .background(if (selected) Color(0xFFCDE8FF) else Color.Transparent)
                 .combinedClickable(onClick = select, onDoubleClick = open)
                 .padding(vertical = 10.dp)
-                .semantics { contentDescription = node.name }
+                .semantics { contentDescription = displayName(node, showFileExtensions) }
         ) {
             Text(
-                (if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name,
+                (if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + displayName(node, showFileExtensions),
                 Modifier.width(300.dp).padding(horizontal = 12.dp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -381,12 +398,17 @@ fun WindowsLearningDesktopApp(
                 maxLines = 1,
             )
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.open)) }, onClick = { menu = false; open() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { menu = false; copy() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menu = false; rename() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; delete() })
+        menuPosition?.let { position -> Box(
+            Modifier.offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }.size(1.dp)
+        ) {
+            DropdownMenu(expanded = true, onDismissRequest = { menuPosition = null }) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.open)) }, onClick = { menuPosition = null; open() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { menuPosition = null; copy() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menuPosition = null; rename() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menuPosition = null; delete() })
+            }
         }
+    }
     }
     HorizontalDivider(color = Color(0xFFE8E8E8))
 }
@@ -531,6 +553,11 @@ private fun nextUntitledName(nodes: Collection<FileNode>): String {
     var number = 1
     while (true) { val candidate = if (number == 1) "Новий текстовий документ.txt" else "Новий текстовий документ ($number).txt"; if (candidate.lowercase() !in names) return candidate; number++ }
 }
+
+private fun displayName(node: FileNode, showFileExtensions: Boolean): String =
+    if (!showFileExtensions && node.kind == FileKind.TEXT && node.name.endsWith(".txt", ignoreCase = true)) {
+        node.name.dropLast(4)
+    } else node.name
 
 private fun Modifier.onSecondaryClick(
     pass: PointerEventPass = PointerEventPass.Main,
