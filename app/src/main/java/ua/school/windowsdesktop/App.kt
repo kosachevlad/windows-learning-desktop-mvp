@@ -3,6 +3,8 @@ package ua.school.windowsdesktop
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -22,6 +24,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -101,7 +106,7 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
     var selectedId by remember(folderId) { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<FileNode?>(null) }
     var deleteTarget by remember { mutableStateOf<FileNode?>(null) }
-    var backgroundMenu by remember { mutableStateOf(false) }
+    var backgroundMenuPosition by remember { mutableStateOf<Offset?>(null) }
     val focusRequester = remember { FocusRequester() }
     val current = nodes.firstOrNull { it.id == folderId }
     val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }.sortedBy { it.name.lowercase() }
@@ -141,22 +146,100 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
             Spacer(Modifier.width(8.dp))
             Button(onClick = { createKind = FileKind.TEXT; newName = "" }) { Text(stringResource(R.string.new_text_document)) }
         }
-        Box(Modifier.fillMaxWidth().weight(1f).onSecondaryClick { selectedId = null; backgroundMenu = true }) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .onSecondaryClick { position ->
+                    selectedId = null
+                    backgroundMenuPosition = position
+                }
+        ) {
             Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 FileHeader()
-                if (children.isEmpty()) Text(stringResource(R.string.folder_empty), Modifier.padding(24.dp), color = Color.DarkGray)
-                children.forEach { node -> FileRow(
-                    node = node, selected = node.id == selectedId,
-                    select = { selectedId = node.id }, open = { selectedId = node.id; openNode(node) },
-                    copy = { selectedId = node.id; scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } },
-                    rename = { selectedId = node.id; renameTarget = node; newName = node.name },
-                    delete = { selectedId = node.id; deleteTarget = node },
-                ) }
+
+                if (children.isEmpty()) {
+                    Text(
+                        stringResource(R.string.folder_empty),
+                        Modifier.padding(24.dp),
+                        color = Color.DarkGray,
+                    )
+                }
+
+                children.forEach { node ->
+                    FileRow(
+                        node = node,
+                        selected = node.id == selectedId,
+                        select = { selectedId = node.id },
+                        open = {
+                            selectedId = node.id
+                            openNode(node)
+                        },
+                        copy = {
+                            selectedId = node.id
+                            scope.launch {
+                                try {
+                                    repository.copy(node.id)
+                                    onClipboardReady(true)
+                                } catch (failure: Exception) {
+                                    onError(errorMessage(failure))
+                                }
+                            }
+                        },
+                        rename = {
+                            selectedId = node.id
+                            renameTarget = node
+                            newName = node.name
+                        },
+                        delete = {
+                            selectedId = node.id
+                            deleteTarget = node
+                        },
+                    )
+                }
             }
-            DropdownMenu(expanded = backgroundMenu, onDismissRequest = { backgroundMenu = false }) {
-                DropdownMenuItem(text = { Text(stringResource(R.string.new_folder)) }, onClick = { backgroundMenu = false; createKind = FileKind.FOLDER; newName = "" })
-                DropdownMenuItem(text = { Text(stringResource(R.string.new_text_document)) }, onClick = { backgroundMenu = false; createKind = FileKind.TEXT; newName = "" })
-                DropdownMenuItem(text = { Text(stringResource(R.string.paste)) }, enabled = clipboardReady, onClick = { backgroundMenu = false; paste() })
+            
+            backgroundMenuPosition?.let { position ->
+                Box(
+                    Modifier
+                        .offset {
+                            IntOffset(
+                                position.x.roundToInt(),
+                                position.y.roundToInt(),
+                            )
+                        }
+                        .size(1.dp)
+                ) {
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = { backgroundMenuPosition = null },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.new_folder)) },
+                            onClick = {
+                                backgroundMenuPosition = null
+                                createKind = FileKind.FOLDER
+                                newName = ""
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.new_text_document)) },
+                            onClick = {
+                                backgroundMenuPosition = null
+                                createKind = FileKind.TEXT
+                                newName = ""
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.paste)) },
+                            enabled = clipboardReady,
+                            onClick = {
+                                backgroundMenuPosition = null
+                                paste()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -191,18 +274,50 @@ fun WindowsLearningDesktopApp(repository: LearningFileRepository) {
 }
 @Composable private fun RowScope.Header(text: String, width: Int) = Text(text, Modifier.width(width.dp).padding(horizontal = 12.dp), fontWeight = FontWeight.SemiBold)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable private fun FileRow(
     node: FileNode, selected: Boolean, select: () -> Unit, open: () -> Unit,
     copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
 ) {
-    val type = when (node.kind) { FileKind.FOLDER -> stringResource(R.string.file_folder); FileKind.TEXT -> stringResource(R.string.text_document); FileKind.PAINT -> stringResource(R.string.paint_image) }
+    val type = when (node.kind) {
+        FileKind.FOLDER -> stringResource(R.string.file_folder)
+        FileKind.TEXT -> stringResource(R.string.text_document)
+        FileKind.PAINT -> stringResource(R.string.paint_image)
+    }
     var menu by remember { mutableStateOf(false) }
-    Box(Modifier.width(760.dp).onSecondaryClick { select(); menu = true }) {
-        Row(Modifier.width(760.dp).background(if (selected) Color(0xFFCDE8FF) else Color.Transparent).clickable(onClick = select).padding(vertical = 10.dp).semantics { contentDescription = node.name }) {
-            Text((if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name, Modifier.width(300.dp).padding(horizontal = 12.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(node.modifiedAt)), Modifier.width(180.dp).padding(horizontal = 12.dp), maxLines = 1)
+    Box(
+        Modifier
+            .width(760.dp)
+            .onSecondaryClick { _ ->
+                select()
+                menu = true
+            }
+    ) {
+        Row(
+            Modifier
+                .width(760.dp)
+                .background(if (selected) Color(0xFFCDE8FF) else Color.Transparent)
+                .combinedClickable(onClick = select, onDoubleClick = open)
+                .padding(vertical = 10.dp)
+                .semantics { contentDescription = node.name }
+        ) {
+            Text(
+                (if (node.kind == FileKind.FOLDER) "□  " else "▤  ") + node.name,
+                Modifier.width(300.dp).padding(horizontal = 12.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(node.modifiedAt)),
+                Modifier.width(180.dp).padding(horizontal = 12.dp),
+                maxLines = 1,
+            )
             Text(type, Modifier.width(160.dp).padding(horizontal = 12.dp), maxLines = 1)
-            Text(if (node.kind == FileKind.FOLDER) "" else "${node.sizeBytes} B", Modifier.width(100.dp).padding(horizontal = 12.dp), maxLines = 1)
+            Text(
+                if (node.kind == FileKind.FOLDER) "" else "${node.sizeBytes} B",
+                Modifier.width(100.dp).padding(horizontal = 12.dp),
+                maxLines = 1,
+            )
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text(stringResource(R.string.open)) }, onClick = { menu = false; open() })
@@ -304,17 +419,24 @@ private fun nextUntitledName(nodes: Collection<FileNode>): String {
     while (true) { val candidate = if (number == 1) "Новий текстовий документ.txt" else "Новий текстовий документ ($number).txt"; if (candidate.lowercase() !in names) return candidate; number++ }
 }
 
-private fun Modifier.onSecondaryClick(action: () -> Unit): Modifier = pointerInput(action) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent()
-            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                event.changes.forEach { it.consume() }
-                action()
+private fun Modifier.onSecondaryClick(action: (Offset) -> Unit): Modifier =
+    pointerInput(action) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+
+                if (
+                    event.type == PointerEventType.Press &&
+                    event.buttons.isSecondaryPressed &&
+                    event.changes.none { it.isConsumed }
+                ) {
+                    val position = event.changes.first().position
+                    event.changes.forEach { it.consume() }
+                    action(position)
+                }
             }
         }
     }
-}
 
 private fun errorMessage(failure: Exception): String = when ((failure as? FileOperationException)?.code) {
     FileError.NAME_CONFLICT -> "Об’єкт із таким ім’ям уже існує."
