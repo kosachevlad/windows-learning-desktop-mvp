@@ -26,4 +26,6 @@
     <string name="error_unknown">Невідома помилка</string>
     <string name="save_changes_question">Зберегти зміни?</string>
     <string name="storage_open_failed">Не вдалося відкрити навчальні файли: %1$s</string>
+    <string name="pencil">Олівець</string><string name="eraser">Гумка</string>
+    <string name="clear_canvas">Очистити</string><string name="new_drawing">Новий малюнок</string>
 </resources>

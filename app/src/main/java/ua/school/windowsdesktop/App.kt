@@ -43,6 +43,7 @@ private sealed interface AppScreen {
     data object Desktop : AppScreen
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
     data class Notepad(val fileId: String? = null) : AppScreen
+    data class Paint(val fileId: String? = null) : AppScreen
     data object Trash : AppScreen
 }
 
@@ -65,10 +66,12 @@ fun WindowsLearningDesktopApp(
                         onFiles = { screen = AppScreen.Explorer() },
                         onNotepad = { screen = AppScreen.Notepad() },
                         onTrash = { screen = AppScreen.Trash },
+                        onPaint = { screen = AppScreen.Paint() },
                         trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
                     )
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
                         onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
+                        onPaint = { screen = AppScreen.Paint(it) },
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         showFileExtensions = showFileExtensions)
@@ -76,6 +79,9 @@ fun WindowsLearningDesktopApp(
                         onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
                         onKeyboardLanguage = onKeyboardLanguage)
+                    is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
+                        onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
+                        onError = { error = it })
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it })
                 }
@@ -86,6 +92,7 @@ fun WindowsLearningDesktopApp(
                 onDesktop = { screen = AppScreen.Desktop },
                 onFiles = { screen = AppScreen.Explorer() },
                 onNotepad = { screen = AppScreen.Notepad() },
+                onPaint = { screen = AppScreen.Paint() },
             )
         }
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
@@ -98,6 +105,7 @@ fun WindowsLearningDesktopApp(
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
     onTrash: () -> Unit,
+    onPaint: () -> Unit,
     trashNotEmpty: Boolean,
 ) {
     Column(Modifier.fillMaxSize().background(Color(0xFF0078D7)).semantics { contentDescription = "Робочий стіл" }) {
@@ -105,7 +113,7 @@ fun WindowsLearningDesktopApp(
             DesktopItem(R.drawable.this_computer, stringResource(R.string.this_pc), onFiles)
             DesktopItem(R.drawable.my_files, stringResource(R.string.my_files), onFiles)
             DesktopItem(R.drawable.notepad, stringResource(R.string.notepad), onNotepad)
-            DesktopItem(R.drawable.paint, "Paint", {})
+            DesktopItem(R.drawable.paint, "Paint", onPaint)
             DesktopItem(if (trashNotEmpty) R.drawable.full_bin else R.drawable.empty_bin, stringResource(R.string.recycle_bin), onTrash)
         }
     }
@@ -117,6 +125,7 @@ fun WindowsLearningDesktopApp(
     onDesktop: () -> Unit,
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
+    onPaint: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
     Row(
@@ -127,7 +136,7 @@ fun WindowsLearningDesktopApp(
         TextButton(onClick = {}) { Text("⌕", color = Color.White) }
         IconButton(onClick = onFiles) { Image(painterResource(R.drawable.my_files), stringResource(R.string.my_files), Modifier.size(30.dp)) }
         IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
-        IconButton(onClick = {}) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
+        IconButton(onClick = onPaint) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
         Spacer(Modifier.weight(1f))
         Box {
         TextButton(onClick = { languageMenu = true }) {
@@ -159,7 +168,8 @@ fun WindowsLearningDesktopApp(
 
 @Composable private fun ExplorerScreen(
     repository: LearningFileRepository, folderId: String, nodes: List<FileNode>,
-    onFolder: (String) -> Unit, onText: (String) -> Unit, onDesktop: () -> Unit, onError: (String) -> Unit,
+    onFolder: (String) -> Unit, onText: (String) -> Unit, onPaint: (String) -> Unit,
+    onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
     showFileExtensions: Boolean,
 ) {
@@ -179,7 +189,7 @@ fun WindowsLearningDesktopApp(
     val selected = children.firstOrNull { it.id == selectedId }
     fun openNode(node: FileNode) { when (node.kind) {
         FileKind.FOLDER -> onFolder(node.id); FileKind.TEXT -> onText(node.id)
-        FileKind.PAINT -> onError("Paint буде доступний у наступному етапі")
+        FileKind.PAINT -> onPaint(node.id)
     } }
     fun openSelected() { selected?.let(::openNode) }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
@@ -548,7 +558,7 @@ fun WindowsLearningDesktopApp(
     )
 }
 
-@Composable private fun WindowTitle(title: String, onClose: () -> Unit) = Row(Modifier.fillMaxWidth().background(Color(0xFF1F4E79)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+@Composable internal fun WindowTitle(title: String, onClose: () -> Unit) = Row(Modifier.fillMaxWidth().background(Color(0xFF1F4E79)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
     TextButton(onClick = onClose, modifier = Modifier.semantics { contentDescription = "Закрити" }) { Text("×", color = Color.White, style = MaterialTheme.typography.headlineSmall) }
 }
