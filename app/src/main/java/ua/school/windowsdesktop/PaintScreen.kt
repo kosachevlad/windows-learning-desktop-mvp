@@ -43,7 +43,7 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
 
-private enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
+private enum class PaintTool { SELECT, PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
 private data class PaintAction(
     val tool: PaintTool,
     val points: List<Offset>,
@@ -70,6 +70,7 @@ fun PaintScreen(
     var tool by remember { mutableStateOf(PaintTool.PENCIL) }
     var selectedColor by remember { mutableIntStateOf(AndroidColor.BLACK) }
     var selectedWidth by remember { mutableFloatStateOf(5f) }
+    var selectedActionIndex by remember { mutableStateOf<Int?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var dirty by remember(file?.id) { mutableStateOf(false) }
@@ -162,6 +163,7 @@ fun PaintScreen(
             }
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ToolButton(stringResource(R.string.select_tool), tool == PaintTool.SELECT) { tool = PaintTool.SELECT; selectedActionIndex = null }
                     ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { tool = PaintTool.PENCIL }
                     ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { tool = PaintTool.BRUSH }
                     ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { tool = PaintTool.ERASER }
@@ -177,7 +179,9 @@ fun PaintScreen(
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(tool, selectedColor, selectedWidth, shiftPressed) {
-                    if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
+                    if (tool == PaintTool.SELECT) detectTapGestures { point ->
+                        selectedActionIndex = actions.indexOfLast { actionBounds(it)?.contains(point) == true }.takeIf { it >= 0 }
+                    } else if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
                         if (tool == PaintTool.FILL) {
                             actions = actions + PaintAction(PaintTool.FILL, listOf(point), selectedColor, selectedWidth)
                             redoActions = emptyList(); dirty = true
@@ -207,6 +211,13 @@ fun PaintScreen(
                 }
         ) {
             previewBitmap?.let { drawImage(it.asImageBitmap(), dstSize = canvasSize) }
+            selectedActionIndex?.let { index ->
+                actions.getOrNull(index)?.let { action ->
+                    actionBounds(action)?.let { bounds ->
+                        drawRect(Color(0xFF1976D2), bounds.topLeft, bounds.size, style = Stroke(2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 6f))))
+                    }
+                }
+            }
         }
         }
             }
@@ -258,6 +269,7 @@ private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction
         val start = action.points.firstOrNull() ?: return@forEach
         val end = action.points.lastOrNull() ?: return@forEach
         when (action.tool) {
+            PaintTool.SELECT -> Unit
             PaintTool.PENCIL, PaintTool.BRUSH, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
             PaintTool.FILL -> floodFill(bitmap, start.x.toInt(), start.y.toInt(), action.color)
             PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
@@ -308,6 +320,15 @@ private fun constrainedLineEnd(start: Offset, end: Offset): Offset {
         start.x + (kotlin.math.cos(snapped) * length).toFloat(),
         start.y + (kotlin.math.sin(snapped) * length).toFloat(),
     )
+}
+
+private fun actionBounds(action: PaintAction): androidx.compose.ui.geometry.Rect? {
+    if (action.points.isEmpty()) return null
+    val minX = action.points.minOf { it.x } - action.width
+    val maxX = action.points.maxOf { it.x } + action.width
+    val minY = action.points.minOf { it.y } - action.width
+    val maxY = action.points.maxOf { it.y } + action.width
+    return androidx.compose.ui.geometry.Rect(minX, minY, maxX, maxY)
 }
 
 internal fun blankPaintPng(): ByteArray {
