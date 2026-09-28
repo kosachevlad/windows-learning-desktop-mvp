@@ -30,6 +30,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
@@ -79,6 +82,9 @@ fun PaintScreen(
     var editMenu by remember { mutableStateOf(false) }
     var viewMenu by remember { mutableStateOf(false) }
     var shiftPressed by remember { mutableStateOf(false) }
+    val paintFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { paintFocusRequester.requestFocus() }
 
     LaunchedEffect(file?.id) {
         if (file != null) try {
@@ -119,13 +125,10 @@ fun PaintScreen(
     fun clear() { baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }
 
     BackHandler { requestClose() }
-    Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).onPreviewKeyEvent { event ->
+    Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).focusRequester(paintFocusRequester).focusTarget().onPreviewKeyEvent { event ->
         when {
-            event.key == Key.ShiftLeft || event.key == Key.ShiftRight -> {
-                shiftPressed = event.type == KeyEventType.KeyDown
-                false
-            }
             event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S -> { save(); true }
+            event.type == KeyEventType.KeyDown || event.type == KeyEventType.KeyUp -> { shiftPressed = event.isShiftPressed; false }
             else -> false
         }
     }) {

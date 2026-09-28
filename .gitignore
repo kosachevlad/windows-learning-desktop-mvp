@@ -4,6 +4,8 @@ build/
 **/build/
 local.properties
 *.iml
+*.jks
+*.keystore
 .superpowers/
 .worktrees/
 /android/
