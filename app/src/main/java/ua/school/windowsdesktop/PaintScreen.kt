@@ -194,9 +194,13 @@ fun PaintScreen(
                         onDrag = { change, _ ->
                             change.consume()
                             val last = actions.lastOrNull() ?: return@detectDragGestures
-                            val end = if (shiftPressed && (tool == PaintTool.RECTANGLE || tool == PaintTool.OVAL)) {
-                                constrainedSquareEnd(last.points.first(), change.position)
-                            } else change.position
+                            val end = when {
+                                shiftPressed && (tool == PaintTool.RECTANGLE || tool == PaintTool.OVAL) ->
+                                    constrainedSquareEnd(last.points.first(), change.position)
+                                shiftPressed && tool == PaintTool.LINE ->
+                                    constrainedLineEnd(last.points.first(), change.position)
+                                else -> change.position
+                            }
                             actions = actions.dropLast(1) + last.copy(points = last.points + end)
                         },
                     )
@@ -290,6 +294,20 @@ private fun constrainedSquareEnd(start: Offset, end: Offset): Offset {
     val dy = end.y - start.y
     val side = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy))
     return Offset(start.x + if (dx < 0) -side else side, start.y + if (dy < 0) -side else side)
+}
+
+private fun constrainedLineEnd(start: Offset, end: Offset): Offset {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val length = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+    if (length == 0f) return start
+    val step = (Math.PI / 4.0)
+    val angle = kotlin.math.atan2(dy.toDouble(), dx.toDouble())
+    val snapped = kotlin.math.round(angle / step) * step
+    return Offset(
+        start.x + (kotlin.math.cos(snapped) * length).toFloat(),
+        start.y + (kotlin.math.sin(snapped) * length).toFloat(),
+    )
 }
 
 internal fun blankPaintPng(): ByteArray {
