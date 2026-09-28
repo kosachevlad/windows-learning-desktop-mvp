@@ -212,7 +212,11 @@ fun PaintScreen(
                                     val delta = change.position - dragStart
                                     originalPoints.map { it + delta }
                                 }
-                                actions = actions.toMutableList().also { it[index] = action.copy(points = updated) }
+                                val resizedWidth = if (resizing && action.tool == PaintTool.TEXT) {
+                                    val sx = actionBounds(action)?.let { (it.width + change.position.x - dragStart.x) / it.width.coerceAtLeast(1f) } ?: 1f
+                                    (action.width * sx).coerceAtLeast(1f)
+                                } else action.width
+                                actions = actions.toMutableList().also { it[index] = action.copy(points = updated, width = resizedWidth) }
                                 dirty = true
                             },
                         )
@@ -359,6 +363,12 @@ private fun constrainedLineEnd(start: Offset, end: Offset): Offset {
 
 private fun actionBounds(action: PaintAction): androidx.compose.ui.geometry.Rect? {
     if (action.points.isEmpty()) return null
+    if (action.tool == PaintTool.TEXT) {
+        val start = action.points.first()
+        val textSize = (action.width * 5).coerceAtLeast(18f)
+        val textWidth = textSize * action.text.length * 0.62f
+        return androidx.compose.ui.geometry.Rect(start.x - 8f, start.y - textSize, start.x + textWidth + 8f, start.y + 8f)
+    }
     val minX = action.points.minOf { it.x } - action.width
     val maxX = action.points.maxOf { it.x } + action.width
     val minY = action.points.minOf { it.y } - action.width
