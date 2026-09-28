@@ -178,9 +178,45 @@ fun PaintScreen(
                 val previewBitmap = remember(canvasSize, baseBitmap, actions) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
-                .pointerInput(tool, selectedColor, selectedWidth, shiftPressed) {
-                    if (tool == PaintTool.SELECT) detectTapGestures { point ->
-                        selectedActionIndex = actions.indexOfLast { actionBounds(it)?.contains(point) == true }.takeIf { it >= 0 }
+                .pointerInput(tool, selectedColor, selectedWidth, shiftPressed, selectedActionIndex, actions) {
+                    if (tool == PaintTool.SELECT) {
+                        var resizing = false
+                        var resizeMode = 0
+                        var dragStart = Offset.Zero
+                        var originalPoints = emptyList<Offset>()
+                        var originalBounds = androidx.compose.ui.geometry.Rect.Zero
+                        detectDragGestures(
+                            onDragStart = { point ->
+                                val hit = actions.indexOfLast { actionBounds(it)?.contains(point) == true }
+                                if (hit < 0) { selectedActionIndex = null; return@detectDragGestures }
+                                selectedActionIndex = hit
+                                val bounds = actionBounds(actions[hit]) ?: return@detectDragGestures
+                                resizeMode = resizeModeForPoint(point, bounds)
+                                resizing = resizeMode != 0
+                                dragStart = point
+                                originalPoints = actions[hit].points
+                                originalBounds = bounds
+                            },
+                            onDrag = { change, _ ->
+                                val index = selectedActionIndex ?: return@detectDragGestures
+                                val action = actions.getOrNull(index) ?: return@detectDragGestures
+                                change.consume()
+                                val bounds = actionBounds(action) ?: return@detectDragGestures
+                                val updated = if (resizing) {
+                                    val left = if (resizeMode and 1 != 0) minOf(change.position.x, originalBounds.right - 4f) else originalBounds.left
+                                    val right = if (resizeMode and 2 != 0) maxOf(change.position.x, originalBounds.left + 4f) else originalBounds.right
+                                    val top = if (resizeMode and 4 != 0) minOf(change.position.y, originalBounds.bottom - 4f) else originalBounds.top
+                                    val bottom = if (resizeMode and 8 != 0) maxOf(change.position.y, originalBounds.top + 4f) else originalBounds.bottom
+                                    resizePoints(originalPoints, originalBounds, androidx.compose.ui.geometry.Rect(left, top, right, bottom))
+                                } else {
+                                    val delta = change.position - dragStart
+                                    originalPoints.map { it + delta }
+                                }
+                                actions = actions.toMutableList().also { it[index] = action.copy(points = updated) }
+                                dirty = true
+                            },
+                        )
+                    } else if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
                     } else if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
                         if (tool == PaintTool.FILL) {
                             actions = actions + PaintAction(PaintTool.FILL, listOf(point), selectedColor, selectedWidth)
@@ -329,6 +365,22 @@ private fun actionBounds(action: PaintAction): androidx.compose.ui.geometry.Rect
     val minY = action.points.minOf { it.y } - action.width
     val maxY = action.points.maxOf { it.y } + action.width
     return androidx.compose.ui.geometry.Rect(minX, minY, maxX, maxY)
+}
+
+private fun resizeModeForPoint(point: Offset, bounds: androidx.compose.ui.geometry.Rect): Int {
+    val tolerance = 28f
+    var mode = 0
+    if (kotlin.math.abs(point.x - bounds.left) <= tolerance) mode = mode or 1
+    if (kotlin.math.abs(point.x - bounds.right) <= tolerance) mode = mode or 2
+    if (kotlin.math.abs(point.y - bounds.top) <= tolerance) mode = mode or 4
+    if (kotlin.math.abs(point.y - bounds.bottom) <= tolerance) mode = mode or 8
+    return mode
+}
+
+private fun resizePoints(points: List<Offset>, from: androidx.compose.ui.geometry.Rect, to: androidx.compose.ui.geometry.Rect): List<Offset> {
+    val sx = to.width / from.width.coerceAtLeast(1f)
+    val sy = to.height / from.height.coerceAtLeast(1f)
+    return points.map { Offset(to.left + (it.x - from.left) * sx, to.top + (it.y - from.top) * sy) }
 }
 
 internal fun blankPaintPng(): ByteArray {
