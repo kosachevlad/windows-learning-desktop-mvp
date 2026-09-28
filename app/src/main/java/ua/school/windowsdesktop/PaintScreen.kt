@@ -78,6 +78,7 @@ fun PaintScreen(
     var fileMenu by remember { mutableStateOf(false) }
     var editMenu by remember { mutableStateOf(false) }
     var viewMenu by remember { mutableStateOf(false) }
+    var shiftPressed by remember { mutableStateOf(false) }
 
     LaunchedEffect(file?.id) {
         if (file != null) try {
@@ -119,7 +120,14 @@ fun PaintScreen(
 
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).onPreviewKeyEvent { event ->
-        if (event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S) { save(); true } else false
+        when {
+            event.key == Key.ShiftLeft || event.key == Key.ShiftRight -> {
+                shiftPressed = event.type == KeyEventType.KeyDown
+                false
+            }
+            event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.S -> { save(); true }
+            else -> false
+        }
     }) {
         WindowTitle(displayFileName(currentName, ua.school.windowsdesktop.domain.FileKind.PAINT, showFileExtensions) + if (dirty) " *" else "", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color(0xFFF5F5F5))) {
@@ -165,7 +173,7 @@ fun PaintScreen(
                 val previewBitmap = remember(canvasSize, baseBitmap, actions) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
-                .pointerInput(tool, selectedColor, selectedWidth) {
+                .pointerInput(tool, selectedColor, selectedWidth, shiftPressed) {
                     if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
                         if (tool == PaintTool.FILL) {
                             actions = actions + PaintAction(PaintTool.FILL, listOf(point), selectedColor, selectedWidth)
@@ -183,7 +191,10 @@ fun PaintScreen(
                         onDrag = { change, _ ->
                             change.consume()
                             val last = actions.lastOrNull() ?: return@detectDragGestures
-                            actions = actions.dropLast(1) + last.copy(points = last.points + change.position)
+                            val end = if (shiftPressed && (tool == PaintTool.RECTANGLE || tool == PaintTool.OVAL)) {
+                                constrainedSquareEnd(last.points.first(), change.position)
+                            } else change.position
+                            actions = actions.dropLast(1) + last.copy(points = last.points + end)
                         },
                     )
                 }
@@ -269,6 +280,13 @@ private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int
         val x = value % bitmap.width; val y = value / bitmap.width
         enqueue(x + 1, y); enqueue(x - 1, y); enqueue(x, y + 1); enqueue(x, y - 1)
     }
+}
+
+private fun constrainedSquareEnd(start: Offset, end: Offset): Offset {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val side = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy))
+    return Offset(start.x + if (dx < 0) -side else side, start.y + if (dy < 0) -side else side)
 }
 
 internal fun blankPaintPng(): ByteArray {

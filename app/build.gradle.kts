@@ -7,16 +7,37 @@ plugins {
 
 android {
     namespace = "ua.school.windowsdesktop"
-    compileSdk = 35
+    compileSdk = 36
+    val uploadStoreFile = rootProject.file("play-upload-key.jks")
+    val uploadStorePassword = providers.gradleProperty("PLAY_UPLOAD_STORE_PASSWORD").orNull
+    val uploadKeyPassword = providers.gradleProperty("PLAY_UPLOAD_KEY_PASSWORD").orNull
+    signingConfigs {
+        create("release") {
+            if (uploadStoreFile.exists() && uploadStorePassword != null && uploadKeyPassword != null) {
+                storeFile = uploadStoreFile
+                storePassword = uploadStorePassword
+                keyAlias = "play-upload"
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
     defaultConfig {
         applicationId = "ua.school.windowsdesktop"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "0.1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
