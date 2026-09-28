@@ -217,7 +217,6 @@ fun PaintScreen(
                             },
                         )
                     } else if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
-                    } else if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
                         if (tool == PaintTool.FILL) {
                             actions = actions + PaintAction(PaintTool.FILL, listOf(point), selectedColor, selectedWidth)
                             redoActions = emptyList(); dirty = true
