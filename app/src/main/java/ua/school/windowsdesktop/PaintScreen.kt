@@ -178,7 +178,7 @@ fun PaintScreen(
                 val previewBitmap = remember(canvasSize, baseBitmap, actions) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
-                .pointerInput(tool, selectedColor, selectedWidth, shiftPressed, selectedActionIndex, actions) {
+                .pointerInput(tool, selectedColor, selectedWidth, shiftPressed, selectedActionIndex) {
                     if (tool == PaintTool.SELECT) {
                         var resizing = false
                         var resizeMode = 0
