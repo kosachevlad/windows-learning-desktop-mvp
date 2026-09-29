@@ -9,12 +9,11 @@ import android.graphics.Rect
 import android.graphics.RectF
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -31,10 +30,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.PointerIcon as ComposePointerIcon
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalView
-import android.view.MotionEvent
 import android.view.PointerIcon
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -49,16 +49,19 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
 
-private enum class PaintTool { SELECT, PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
-private data class PaintAction(
+internal enum class PaintTool { SELECT, PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
+internal data class PaintAction(
     val tool: PaintTool,
     val points: List<Offset>,
     val color: Int,
     val width: Float,
     val text: String = "",
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val editBounds: androidx.compose.ui.geometry.Rect? = null,
 )
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun PaintScreen(
     repository: LearningFileRepository,
@@ -79,6 +82,7 @@ fun PaintScreen(
     var selectedWidth by remember { mutableFloatStateOf(5f) }
     var selectedActionIndex by remember { mutableStateOf<Int?>(null) }
     val localView = LocalView.current
+    var hoverPoint by remember { mutableStateOf<Offset?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var dirty by remember(file?.id) { mutableStateOf(false) }
@@ -115,7 +119,7 @@ fun PaintScreen(
                 ?: repository.createPaint(currentName, file?.parentId ?: FileOperations.ROOT_ID, bytes)
             currentId = saved.id; currentName = saved.name
             baseBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            actions = emptyList(); redoActions = emptyList(); dirty = false; after()
+            selectedActionIndex = null; actions = emptyList(); redoActions = emptyList(); dirty = false; after()
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося зберегти малюнок") } }
     }
     fun submitSaveAs() {
@@ -125,13 +129,13 @@ fun PaintScreen(
             val saved = repository.createPaint(saveAsName, file?.parentId ?: FileOperations.ROOT_ID, bytes)
             currentId = saved.id; currentName = saved.name
             baseBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            actions = emptyList(); redoActions = emptyList(); dirty = false; saveAsRequested = false
+            selectedActionIndex = null; actions = emptyList(); redoActions = emptyList(); dirty = false; saveAsRequested = false
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося зберегти малюнок") } }
     }
     fun requestClose() { if (dirty) closeRequested = true else onClose() }
-    fun undo() { if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }
-    fun redo() { if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }
-    fun clear() { baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }
+    fun undo() { selectedActionIndex = null; if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }
+    fun redo() { selectedActionIndex = null; if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }
+    fun clear() { selectedActionIndex = null; baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }
 
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).focusRequester(paintFocusRequester).focusTarget().onPreviewKeyEvent { event ->
@@ -172,15 +176,15 @@ fun PaintScreen(
             }
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ToolButton(stringResource(R.string.select_tool), tool == PaintTool.SELECT) { tool = PaintTool.SELECT; selectedActionIndex = null }
-                    ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { tool = PaintTool.PENCIL }
-                    ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { tool = PaintTool.BRUSH }
-                    ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { tool = PaintTool.ERASER }
-                    ToolButton(stringResource(R.string.fill), tool == PaintTool.FILL) { tool = PaintTool.FILL }
-                    ToolButton(stringResource(R.string.line), tool == PaintTool.LINE) { tool = PaintTool.LINE }
-                    ToolButton(stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { tool = PaintTool.RECTANGLE }
-                    ToolButton(stringResource(R.string.oval), tool == PaintTool.OVAL) { tool = PaintTool.OVAL }
-                    ToolButton(stringResource(R.string.text_tool), tool == PaintTool.TEXT) { tool = PaintTool.TEXT }
+                    ToolButton(stringResource(R.string.select_tool), tool == PaintTool.SELECT) { tool = PaintTool.SELECT }
+                    ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { selectedActionIndex = null; tool = PaintTool.PENCIL }
+                    ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { selectedActionIndex = null; tool = PaintTool.BRUSH }
+                    ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { selectedActionIndex = null; tool = PaintTool.ERASER }
+                    ToolButton(stringResource(R.string.fill), tool == PaintTool.FILL) { selectedActionIndex = null; tool = PaintTool.FILL }
+                    ToolButton(stringResource(R.string.line), tool == PaintTool.LINE) { selectedActionIndex = null; tool = PaintTool.LINE }
+                    ToolButton(stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { selectedActionIndex = null; tool = PaintTool.RECTANGLE }
+                    ToolButton(stringResource(R.string.oval), tool == PaintTool.OVAL) { selectedActionIndex = null; tool = PaintTool.OVAL }
+                    ToolButton(stringResource(R.string.text_tool), tool == PaintTool.TEXT) { selectedActionIndex = null; tool = PaintTool.TEXT }
                 }
                 if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else {
@@ -188,87 +192,100 @@ fun PaintScreen(
                 val selectedBounds = selectedActionIndex?.let { actions.getOrNull(it)?.let(::actionBounds) }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
-                .pointerInteropFilter { event ->
-                    if (event.actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
-                        localView.pointerIcon = if (tool == PaintTool.SELECT && selectedBounds != null) {
-                            PointerIcon.getSystemIcon(localView.context, pointerIconTypeForPoint(Offset(event.x, event.y), selectedBounds))
-                        } else {
-                            PointerIcon.getSystemIcon(localView.context, PointerIcon.TYPE_ARROW)
+                .pointerHoverIcon(ComposePointerIcon(PointerIcon.getSystemIcon(localView.context,
+                    hoverPoint?.let { point -> selectedBounds?.let { pointerIconTypeForPoint(point, it) } }
+                        ?: PointerIcon.TYPE_ARROW)))
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            hoverPoint = if (event.type == PointerEventType.Exit) null else event.changes.firstOrNull()?.position
                         }
-                    } else if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
-                        localView.pointerIcon = PointerIcon.getSystemIcon(localView.context, PointerIcon.TYPE_ARROW)
                     }
-                    false
                 }
-                .pointerInput(tool, selectedColor, selectedWidth, shiftPressed, selectedActionIndex) {
-                    if (tool == PaintTool.SELECT) {
-                        var resizing = false
-                        var resizeMode = 0
-                        var dragStart = Offset.Zero
-                        var originalPoints = emptyList<Offset>()
-                        var originalBounds = androidx.compose.ui.geometry.Rect.Zero
-                        detectDragGestures(
-                            onDragStart = { point ->
-                                val hit = actions.indexOfLast { actionBounds(it)?.contains(point) == true }
-                                if (hit < 0) { selectedActionIndex = null; return@detectDragGestures }
-                                selectedActionIndex = hit
-                                val bounds = actionBounds(actions[hit]) ?: return@detectDragGestures
-                                resizeMode = resizeModeForPoint(point, bounds)
-                                resizing = resizeMode != 0
-                                dragStart = point
-                                originalPoints = actions[hit].points
-                                originalBounds = bounds
-                            },
-                            onDrag = { change, _ ->
-                                val index = selectedActionIndex ?: return@detectDragGestures
-                                val action = actions.getOrNull(index) ?: return@detectDragGestures
-                                change.consume()
-                                val bounds = actionBounds(action) ?: return@detectDragGestures
-                                val updated = if (resizing) {
-                                    val left = if (resizeMode and 1 != 0) minOf(change.position.x, originalBounds.right - 4f) else originalBounds.left
-                                    val right = if (resizeMode and 2 != 0) maxOf(change.position.x, originalBounds.left + 4f) else originalBounds.right
-                                    val top = if (resizeMode and 4 != 0) minOf(change.position.y, originalBounds.bottom - 4f) else originalBounds.top
-                                    val bottom = if (resizeMode and 8 != 0) maxOf(change.position.y, originalBounds.top + 4f) else originalBounds.bottom
-                                    resizePoints(originalPoints, originalBounds, androidx.compose.ui.geometry.Rect(left, top, right, bottom))
-                                } else {
-                                    val delta = change.position - dragStart
-                                    originalPoints.map { it + delta }
-                                }
-                                val resizedWidth = if (resizing && action.tool == PaintTool.TEXT) {
-                                    val sx = actionBounds(action)?.let { (it.width + change.position.x - dragStart.x) / it.width.coerceAtLeast(1f) } ?: 1f
-                                    (action.width * sx).coerceAtLeast(1f)
-                                } else action.width
-                                actions = actions.toMutableList().also { it[index] = action.copy(points = updated, width = resizedWidth) }
-                                dirty = true
-                            },
-                        )
-                    } else if (tool == PaintTool.FILL || tool == PaintTool.TEXT) detectTapGestures { point ->
-                        if (tool == PaintTool.FILL) {
-                            actions = actions + PaintAction(PaintTool.FILL, listOf(point), selectedColor, selectedWidth)
-                            redoActions = emptyList(); dirty = true
-                        } else {
-                            textPosition = point; enteredText = ""
-                        }
-                    } else detectDragGestures(
-                        onDragStart = { point ->
-                            val color = if (tool == PaintTool.ERASER) AndroidColor.WHITE else selectedColor
-                            val width = when (tool) { PaintTool.ERASER -> selectedWidth * 4; PaintTool.BRUSH -> selectedWidth * 2; else -> selectedWidth }
-                            actions = actions + PaintAction(tool, listOf(point), color, width)
-                            redoActions = emptyList(); dirty = true
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val last = actions.lastOrNull() ?: return@detectDragGestures
-                            val end = when {
-                                shiftPressed && (tool == PaintTool.RECTANGLE || tool == PaintTool.OVAL) ->
-                                    constrainedSquareEnd(last.points.first(), change.position)
-                                shiftPressed && tool == PaintTool.LINE ->
-                                    constrainedLineEnd(last.points.first(), change.position)
-                                else -> change.position
+                // Keep this handler alive across recompositions, including selection and Shift changes.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        paintFocusRequester.requestFocus()
+                        down.consume()
+                        val before = actions
+                        val activeIndex = selectedActionIndex
+                        val original = activeIndex?.let { actions.getOrNull(it) }
+                        val bounds = original?.let(::actionBounds)
+                        if (original != null && bounds != null) {
+                            val mode = selectionModeForPoint(down.position, bounds)
+                            if (mode < 0) {
+                                // Commit on an outside click; never search older actions for selection.
+                                selectedActionIndex = null
+                                return@awaitEachGesture
                             }
-                            actions = actions.dropLast(1) + last.copy(points = last.points + end)
-                        },
-                    )
+                            var completed = false
+                            try {
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    val delta = change.position - down.position
+                                    val target = transformedBounds(bounds, delta, mode)
+                                    if (delta != Offset.Zero || actions != before) {
+                                        actions = before.toMutableList().also { it[activeIndex] = transformAction(original, bounds, target) }
+                                        redoActions = emptyList(); dirty = true
+                                    }
+                                    change.consume()
+                                    completed = !change.pressed
+                                } while (!completed)
+                            } finally {
+                                if (!completed) actions = before
+                            }
+                            return@awaitEachGesture
+                        }
+                        val gestureTool = tool
+                        if (gestureTool == PaintTool.SELECT) return@awaitEachGesture
+                        if (gestureTool == PaintTool.TEXT || gestureTool == PaintTool.FILL) {
+                            var released = false
+                            do {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                change.consume()
+                                released = !change.pressed
+                            } while (!released)
+                            if (released) {
+                                if (gestureTool == PaintTool.TEXT) { textPosition = down.position; enteredText = "" }
+                                else {
+                                    actions = actions + PaintAction(PaintTool.FILL, listOf(down.position), selectedColor, selectedWidth)
+                                    redoActions = emptyList(); dirty = true
+                                }
+                            }
+                            return@awaitEachGesture
+                        }
+                        val color = if (gestureTool == PaintTool.ERASER) AndroidColor.WHITE else selectedColor
+                        val width = when (gestureTool) { PaintTool.ERASER -> selectedWidth * 4; PaintTool.BRUSH -> selectedWidth * 2; else -> selectedWidth }
+                        val isShape = gestureTool in listOf(PaintTool.LINE, PaintTool.RECTANGLE, PaintTool.OVAL)
+                        var drawing = PaintAction(gestureTool, listOf(down.position, down.position), color, width)
+                        actions = before + drawing
+                        var completed = false
+                        try {
+                            do {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                val end = when {
+                                    shiftPressed && gestureTool in listOf(PaintTool.RECTANGLE, PaintTool.OVAL) -> constrainedSquareEnd(down.position, change.position)
+                                    shiftPressed && gestureTool == PaintTool.LINE -> constrainedLineEnd(down.position, change.position)
+                                    else -> change.position
+                                }
+                                drawing = drawing.copy(points = if (isShape) listOf(down.position, end) else drawing.points + end)
+                                actions = before + drawing
+                                change.consume()
+                                completed = !change.pressed
+                            } while (!completed)
+                            if (completed) {
+                                redoActions = emptyList(); dirty = true
+                                selectedActionIndex = if (isShape) actions.lastIndex else null
+                            }
+                        } finally {
+                            if (!completed) actions = before
+                        }
+                    }
                 }
         ) {
             previewBitmap?.let { drawImage(it.asImageBitmap(), dstSize = canvasSize) }
@@ -276,6 +293,11 @@ fun PaintScreen(
                 actions.getOrNull(index)?.let { action ->
                     actionBounds(action)?.let { bounds ->
                         drawRect(Color(0xFF1976D2), bounds.topLeft, bounds.size, style = Stroke(2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 6f))))
+                        selectionHandles(bounds).forEach { center ->
+                            val origin = center - Offset(4f, 4f)
+                            drawRect(Color.White, origin, Size(8f, 8f))
+                            drawRect(Color(0xFF1976D2), origin, Size(8f, 8f), style = Stroke(1f))
+                        }
                     }
                 }
             }
@@ -300,14 +322,14 @@ fun PaintScreen(
     textPosition?.let { position -> AlertDialog(
         modifier = Modifier.dialogKeys(enteredText.isNotBlank(), {
             actions = actions + PaintAction(PaintTool.TEXT, listOf(position), selectedColor, selectedWidth, enteredText)
-            redoActions = emptyList(); dirty = true; textPosition = null
+            selectedActionIndex = actions.lastIndex; redoActions = emptyList(); dirty = true; textPosition = null
         }, { textPosition = null }),
         onDismissRequest = { textPosition = null },
         title = { Text(stringResource(R.string.enter_text)) },
         text = { OutlinedTextField(enteredText, { enteredText = it }, singleLine = true) },
         confirmButton = { TextButton(enabled = enteredText.isNotBlank(), onClick = {
             actions = actions + PaintAction(PaintTool.TEXT, listOf(position), selectedColor, selectedWidth, enteredText)
-            redoActions = emptyList(); dirty = true; textPosition = null
+            selectedActionIndex = actions.lastIndex; redoActions = emptyList(); dirty = true; textPosition = null
         }) { Text(stringResource(R.string.ok)) } },
         dismissButton = { TextButton(onClick = { textPosition = null }) { Text(stringResource(R.string.cancel)) } },
     ) }
@@ -336,7 +358,14 @@ private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction
             PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
             PaintTool.RECTANGLE -> canvas.drawRect(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
             PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
-            PaintTool.TEXT -> { paint.style = Paint.Style.FILL; paint.textSize = (action.width * 5).coerceAtLeast(18f); canvas.drawText(action.text, start.x, start.y, paint) }
+            PaintTool.TEXT -> {
+                paint.style = Paint.Style.FILL; paint.textSize = (action.width * 5).coerceAtLeast(18f)
+                canvas.save()
+                canvas.translate(start.x, start.y)
+                canvas.scale(action.scaleX, action.scaleY)
+                canvas.drawText(action.text, 0f, 0f, paint)
+                canvas.restore()
+            }
         }
     }
     return bitmap
@@ -383,56 +412,77 @@ private fun constrainedLineEnd(start: Offset, end: Offset): Offset {
     )
 }
 
-private fun actionBounds(action: PaintAction): androidx.compose.ui.geometry.Rect? {
+internal fun actionBounds(action: PaintAction): androidx.compose.ui.geometry.Rect? {
+    action.editBounds?.let { return it }
     if (action.points.isEmpty()) return null
     if (action.tool == PaintTool.TEXT) {
         val start = action.points.first()
-        val textSize = (action.width * 5).coerceAtLeast(18f)
-        val textWidth = textSize * action.text.length * 0.62f
-        return androidx.compose.ui.geometry.Rect(start.x - 8f, start.y - textSize, start.x + textWidth + 8f, start.y + 8f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = (action.width * 5).coerceAtLeast(18f) }
+        val ink = Rect()
+        paint.getTextBounds(action.text, 0, action.text.length, ink)
+        return androidx.compose.ui.geometry.Rect(
+            start.x + minOf(0f, ink.left.toFloat()) * action.scaleX - 4f,
+            start.y + paint.fontMetrics.ascent * action.scaleY - 4f,
+            start.x + maxOf(paint.measureText(action.text), ink.right.toFloat()) * action.scaleX + 4f,
+            start.y + paint.fontMetrics.descent * action.scaleY + 4f,
+        )
     }
-    val minX = action.points.minOf { it.x } - action.width
-    val maxX = action.points.maxOf { it.x } + action.width
-    val minY = action.points.minOf { it.y } - action.width
-    val maxY = action.points.maxOf { it.y } + action.width
-    return androidx.compose.ui.geometry.Rect(minX, minY, maxX, maxY)
+    val padding = maxOf(4f, action.width / 2f)
+    return androidx.compose.ui.geometry.Rect(
+        action.points.minOf { it.x } - padding, action.points.minOf { it.y } - padding,
+        action.points.maxOf { it.x } + padding, action.points.maxOf { it.y } + padding,
+    )
 }
 
-private fun resizeModeForPoint(point: Offset, bounds: androidx.compose.ui.geometry.Rect): Int {
-    val tolerance = 28f
-    var mode = 0
-    if (kotlin.math.abs(point.x - bounds.left) <= tolerance) mode = mode or 1
-    if (kotlin.math.abs(point.x - bounds.right) <= tolerance) mode = mode or 2
-    if (kotlin.math.abs(point.y - bounds.top) <= tolerance) mode = mode or 4
-    if (kotlin.math.abs(point.y - bounds.bottom) <= tolerance) mode = mode or 8
-    return mode
-}
+private fun selectionHandles(bounds: androidx.compose.ui.geometry.Rect): List<Offset> = listOf(
+    bounds.topLeft, Offset(bounds.center.x, bounds.top), bounds.topRight,
+    Offset(bounds.right, bounds.center.y), bounds.bottomRight, Offset(bounds.center.x, bounds.bottom),
+    bounds.bottomLeft, Offset(bounds.left, bounds.center.y),
+)
 
-private fun pointerIconTypeForPoint(point: Offset, bounds: androidx.compose.ui.geometry.Rect): Int {
-    val tolerance = 24f
+// -1 = outside, 0 = move. Use the same finite hit zones for hover and dragging.
+internal fun selectionModeForPoint(point: Offset, bounds: androidx.compose.ui.geometry.Rect): Int {
+    if (!bounds.inflate(5f).contains(point)) return -1
+    val horizontalTolerance = minOf(8f, bounds.width / 4f)
+    val verticalTolerance = minOf(8f, bounds.height / 4f)
     val horizontal = when {
-        point.x <= bounds.left + tolerance -> 1
-        point.x >= bounds.right - tolerance -> 2
+        kotlin.math.abs(point.x - bounds.left) <= horizontalTolerance -> 1
+        kotlin.math.abs(point.x - bounds.right) <= horizontalTolerance -> 2
         else -> 0
     }
     val vertical = when {
-        point.y <= bounds.top + tolerance -> 4
-        point.y >= bounds.bottom - tolerance -> 8
+        kotlin.math.abs(point.y - bounds.top) <= verticalTolerance -> 4
+        kotlin.math.abs(point.y - bounds.bottom) <= verticalTolerance -> 8
         else -> 0
     }
-    val type = when (horizontal or vertical) {
-        1 -> PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW
-        2 -> PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW
-        4 -> PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW
-        8 -> PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW
-        1 or 4 -> PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW
-        2 or 4 -> PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW
-        1 or 8 -> PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW
-        2 or 8 -> PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW
-        else -> PointerIcon.TYPE_GRAB
-    }
-    return type
+    return if (horizontal == 0 && vertical == 0 && !bounds.contains(point)) -1 else horizontal or vertical
 }
+
+private fun pointerIconTypeForPoint(point: Offset, bounds: androidx.compose.ui.geometry.Rect): Int = when (selectionModeForPoint(point, bounds)) {
+    -1 -> PointerIcon.TYPE_ARROW
+    1, 2 -> PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW
+    4, 8 -> PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW
+    5, 10 -> PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW
+    6, 9 -> PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW
+    else -> PointerIcon.TYPE_ALL_SCROLL
+}
+
+internal fun transformedBounds(bounds: androidx.compose.ui.geometry.Rect, delta: Offset, mode: Int): androidx.compose.ui.geometry.Rect {
+    if (mode == 0) return bounds.translate(delta)
+    return androidx.compose.ui.geometry.Rect(
+        if (mode and 1 != 0) minOf(bounds.left + delta.x, bounds.right - 4f) else bounds.left,
+        if (mode and 4 != 0) minOf(bounds.top + delta.y, bounds.bottom - 4f) else bounds.top,
+        if (mode and 2 != 0) maxOf(bounds.right + delta.x, bounds.left + 4f) else bounds.right,
+        if (mode and 8 != 0) maxOf(bounds.bottom + delta.y, bounds.top + 4f) else bounds.bottom,
+    )
+}
+
+internal fun transformAction(action: PaintAction, from: androidx.compose.ui.geometry.Rect, to: androidx.compose.ui.geometry.Rect): PaintAction = action.copy(
+    points = resizePoints(action.points, from, to),
+    scaleX = action.scaleX * to.width / from.width.coerceAtLeast(1f),
+    scaleY = action.scaleY * to.height / from.height.coerceAtLeast(1f),
+    editBounds = to,
+)
 
 private fun resizePoints(points: List<Offset>, from: androidx.compose.ui.geometry.Rect, to: androidx.compose.ui.geometry.Rect): List<Offset> {
     val sx = to.width / from.width.coerceAtLeast(1f)
