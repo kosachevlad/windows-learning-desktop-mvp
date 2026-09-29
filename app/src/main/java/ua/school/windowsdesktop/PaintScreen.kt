@@ -9,6 +9,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +31,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.LocalView
+import android.view.MotionEvent
+import android.view.PointerIcon
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
@@ -52,6 +58,7 @@ private data class PaintAction(
     val text: String = "",
 )
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PaintScreen(
     repository: LearningFileRepository,
@@ -71,6 +78,7 @@ fun PaintScreen(
     var selectedColor by remember { mutableIntStateOf(AndroidColor.BLACK) }
     var selectedWidth by remember { mutableFloatStateOf(5f) }
     var selectedActionIndex by remember { mutableStateOf<Int?>(null) }
+    val localView = LocalView.current
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var dirty by remember(file?.id) { mutableStateOf(false) }
@@ -160,6 +168,7 @@ fun PaintScreen(
                 listOf(Color.Black, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFFFFC107), Color(0xFF7B1FA2), Color(0xFFFF7A00), Color(0xFFFF69B4), Color(0xFF795548), Color(0xFF81D4FA)).forEach { color ->
                     Box(Modifier.padding(3.dp).size(32.dp).background(color).border(if (selectedColor == color.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = color.toArgb() })
                 }
+                Box(Modifier.padding(3.dp).size(32.dp).background(Color.Gray).border(if (selectedColor == Color.Gray.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = Color.Gray.toArgb() })
             }
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -176,8 +185,21 @@ fun PaintScreen(
                 if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else {
                 val previewBitmap = remember(canvasSize, baseBitmap, actions) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null }
+                val selectedBounds = selectedActionIndex?.let { actions.getOrNull(it)?.let(::actionBounds) }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
+                .pointerInteropFilter { event ->
+                    if (event.actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
+                        localView.pointerIcon = if (tool == PaintTool.SELECT && selectedBounds != null) {
+                            PointerIcon.getSystemIcon(localView.context, pointerIconTypeForPoint(Offset(event.x, event.y), selectedBounds))
+                        } else {
+                            PointerIcon.getSystemIcon(localView.context, PointerIcon.TYPE_ARROW)
+                        }
+                    } else if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
+                        localView.pointerIcon = PointerIcon.getSystemIcon(localView.context, PointerIcon.TYPE_ARROW)
+                    }
+                    false
+                }
                 .pointerInput(tool, selectedColor, selectedWidth, shiftPressed, selectedActionIndex) {
                     if (tool == PaintTool.SELECT) {
                         var resizing = false
@@ -384,6 +406,32 @@ private fun resizeModeForPoint(point: Offset, bounds: androidx.compose.ui.geomet
     if (kotlin.math.abs(point.y - bounds.top) <= tolerance) mode = mode or 4
     if (kotlin.math.abs(point.y - bounds.bottom) <= tolerance) mode = mode or 8
     return mode
+}
+
+private fun pointerIconTypeForPoint(point: Offset, bounds: androidx.compose.ui.geometry.Rect): Int {
+    val tolerance = 24f
+    val horizontal = when {
+        point.x <= bounds.left + tolerance -> 1
+        point.x >= bounds.right - tolerance -> 2
+        else -> 0
+    }
+    val vertical = when {
+        point.y <= bounds.top + tolerance -> 4
+        point.y >= bounds.bottom - tolerance -> 8
+        else -> 0
+    }
+    val type = when (horizontal or vertical) {
+        1 -> PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW
+        2 -> PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW
+        4 -> PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW
+        8 -> PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW
+        1 or 4 -> PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW
+        2 or 4 -> PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW
+        1 or 8 -> PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW
+        2 or 8 -> PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW
+        else -> PointerIcon.TYPE_GRAB
+    }
+    return type
 }
 
 private fun resizePoints(points: List<Offset>, from: androidx.compose.ui.geometry.Rect, to: androidx.compose.ui.geometry.Rect): List<Offset> {
