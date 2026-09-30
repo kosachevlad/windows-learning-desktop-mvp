@@ -32,6 +32,7 @@ internal fun DesktopScreen(
     repository: LearningFileRepository,
     nodes: List<FileNode>,
     onFiles: () -> Unit,
+    onComputer: () -> Unit,
     onNotepad: () -> Unit,
     onTrash: () -> Unit,
     onPaint: () -> Unit,
@@ -75,7 +76,7 @@ internal fun DesktopScreen(
     Box(Modifier.fillMaxSize().background(Color(0xFF0078D7)).onSecondaryClick { point ->
         selectedId = null; backgroundMenu = point
     }) {
-        SystemDesktopIcon(R.drawable.this_computer, stringResource(R.string.this_pc), 12, onFiles)
+        SystemDesktopIcon(R.drawable.this_computer, stringResource(R.string.this_pc), 12, onComputer)
         SystemDesktopIcon(R.drawable.my_files, stringResource(R.string.my_files), 112, onFiles)
         SystemDesktopIcon(R.drawable.notepad, stringResource(R.string.notepad), 212, onNotepad)
         SystemDesktopIcon(R.drawable.paint, "Paint", 312, onPaint)

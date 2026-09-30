@@ -35,6 +35,8 @@ import kotlin.math.roundToInt
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.*
@@ -44,6 +46,7 @@ private sealed interface AppScreen {
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
     data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
+    data object SystemInfo : AppScreen
     data object Trash : AppScreen
 }
 
@@ -66,6 +69,7 @@ fun WindowsLearningDesktopApp(
                         repository = repository,
                         nodes = snapshot.nodes.values.toList(),
                         onFiles = { screen = AppScreen.Explorer() },
+                        onComputer = { screen = AppScreen.SystemInfo },
                         onNotepad = { screen = AppScreen.Notepad() },
                         onTrash = { screen = AppScreen.Trash },
                         onPaint = { screen = AppScreen.Paint() },
@@ -89,6 +93,7 @@ fun WindowsLearningDesktopApp(
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
+                    AppScreen.SystemInfo -> SystemInfoScreen(onClose = { screen = AppScreen.Desktop })
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         showFileExtensions = showFileExtensions)
@@ -118,6 +123,14 @@ fun WindowsLearningDesktopApp(
     onPaint: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
+    val clockText by produceState(initialValue = SimpleDateFormat("H:mm", Locale.ROOT).format(Date())) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            value = SimpleDateFormat("H:mm", Locale.ROOT).format(Date(now))
+            // Align to the next minute rather than to the time the taskbar was opened.
+            delay(60_000L - now % 60_000L)
+        }
+    }
     Row(
         Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -144,7 +157,7 @@ fun WindowsLearningDesktopApp(
                 DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
             }
         }
-        Text(SimpleDateFormat("HH:mm").format(Date()), color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
+        Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
