@@ -125,6 +125,7 @@ fun WindowsLearningDesktopApp(
     onPaint: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
+    var startMenu by remember { mutableStateOf(false) }
     val clockText by produceState(initialValue = SimpleDateFormat("H:mm", Locale.ROOT).format(Date())) {
         while (true) {
             val now = System.currentTimeMillis()
@@ -137,7 +138,36 @@ fun WindowsLearningDesktopApp(
         Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onDesktop) { Image(painterResource(R.drawable.start_btn), "Пуск", Modifier.size(32.dp)) }
+        Box {
+            IconButton(onClick = { startMenu = !startMenu }) {
+                Image(painterResource(R.drawable.start_btn), "Пуск", Modifier.size(32.dp))
+            }
+            DropdownMenu(
+                expanded = startMenu,
+                onDismissRequest = { startMenu = false },
+                modifier = Modifier.width(270.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+            ) {
+                data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
+                listOf(
+                    StartApp("Блокнот", R.drawable.notepad) { startMenu = false; onNotepad() },
+                    StartApp("Excel", R.drawable.start_excel),
+                    StartApp("Google Chrome", R.drawable.start_chrome),
+                    StartApp("Календар", R.drawable.start_calendar),
+                    StartApp("Калькулятор", R.drawable.start_calculator),
+                    StartApp("Мої файли", R.drawable.my_files) { startMenu = false; onFiles() },
+                    StartApp("Paint", R.drawable.paint) { startMenu = false; onPaint() },
+                    StartApp("PowerPoint", R.drawable.start_powerpoint),
+                    StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
+                    StartApp("Word", R.drawable.start_word),
+                ).sortedBy { it.name.lowercase() }.forEach { app ->
+                    DropdownMenuItem(
+                        text = { Text(app.name) },
+                        leadingIcon = { Icon(painterResource(app.icon), null, Modifier.size(28.dp), tint = Color.Unspecified) },
+                        onClick = app.action,
+                    )
+                }
+            }
+        }
         TextButton(onClick = {}) { Text("⌕", color = Color.White) }
         IconButton(onClick = onFiles) { Image(painterResource(R.drawable.my_files), stringResource(R.string.my_files), Modifier.size(30.dp)) }
         IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
