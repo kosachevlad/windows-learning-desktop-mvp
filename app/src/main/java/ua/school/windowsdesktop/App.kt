@@ -62,6 +62,7 @@ fun WindowsLearningDesktopApp(
     var clipboardReady by remember { mutableStateOf(false) }
     var showFileExtensions by remember { mutableStateOf(false) }
     MaterialTheme {
+        DesktopViewport {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (val current = screen) {
@@ -107,6 +108,7 @@ fun WindowsLearningDesktopApp(
                 onNotepad = { screen = AppScreen.Notepad() },
                 onPaint = { screen = AppScreen.Paint() },
             )
+        }
         }
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
             title = { Text(stringResource(R.string.error_title)) }, text = { Text(message) },

@@ -73,14 +73,20 @@ internal fun DesktopScreen(
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося створити об’єкт") } }
     }
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF0078D7)).onSecondaryClick { point ->
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0078D7)).onSecondaryClick { point ->
         selectedId = null; backgroundMenu = point
     }) {
-        SystemDesktopIcon(R.drawable.this_computer, stringResource(R.string.this_pc), 12, onComputer)
-        SystemDesktopIcon(R.drawable.my_files, stringResource(R.string.my_files), 112, onFiles)
-        SystemDesktopIcon(R.drawable.notepad, stringResource(R.string.notepad), 212, onNotepad)
-        SystemDesktopIcon(R.drawable.paint, "Paint", 312, onPaint)
-        SystemDesktopIcon(if (trashNotEmpty) R.drawable.full_bin else R.drawable.empty_bin, stringResource(R.string.recycle_bin), 412, onTrash)
+        val rows = ((maxHeight.value - 12f) / 100f).toInt().coerceAtLeast(1)
+        val systemIcons = listOf(
+            Triple(R.drawable.this_computer, stringResource(R.string.this_pc), onComputer),
+            Triple(R.drawable.my_files, stringResource(R.string.my_files), onFiles),
+            Triple(R.drawable.notepad, stringResource(R.string.notepad), onNotepad),
+            Triple(R.drawable.paint, "Paint", onPaint),
+            Triple(if (trashNotEmpty) R.drawable.full_bin else R.drawable.empty_bin, stringResource(R.string.recycle_bin), onTrash),
+        )
+        systemIcons.forEachIndexed { index, (icon, label, open) ->
+            SystemDesktopIcon(icon, label, 12 + (index / rows) * 104, 12 + (index % rows) * 100, open)
+        }
 
         desktopNodes.forEach { node ->
             val position = positions.getValue(node.id)
@@ -124,8 +130,8 @@ internal fun DesktopScreen(
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-@Composable private fun SystemDesktopIcon(icon: Int, label: String, y: Int, open: () -> Unit) {
-    Column(Modifier.offset(x = 12.dp, y = y.dp).width(92.dp).onSecondaryClick(PointerEventPass.Initial) {}
+@Composable private fun SystemDesktopIcon(icon: Int, label: String, x: Int, y: Int, open: () -> Unit) {
+    Column(Modifier.offset(x = x.dp, y = y.dp).width(92.dp).onSecondaryClick(PointerEventPass.Initial) {}
         .combinedClickable(onClick = {}, onDoubleClick = open).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Image(painterResource(icon), label, Modifier.size(58.dp))
         Text(label, color = Color.White, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
