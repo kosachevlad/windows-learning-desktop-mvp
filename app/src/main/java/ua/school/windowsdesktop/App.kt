@@ -136,7 +136,7 @@ fun WindowsLearningDesktopApp(
         }
     }
     Row(
-        Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 2.dp),
+        Modifier.fillMaxWidth().background(Color(0xE61B1B1B)).padding(horizontal = 8.dp, vertical = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
@@ -147,7 +147,7 @@ fun WindowsLearningDesktopApp(
                 expanded = startMenu,
                 onDismissRequest = { startMenu = false },
                 modifier = Modifier.width(270.dp),
-                offset = DpOffset(0.dp, 160.dp),
+                offset = DpOffset(0.dp, 220.dp),
             ) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
@@ -172,13 +172,13 @@ fun WindowsLearningDesktopApp(
                 }
             }
         }
-        IconButton(onClick = {}) { Image(painterResource(R.drawable.start_search), "Пошук", Modifier.size(30.dp)) }
-        IconButton(onClick = onFiles) { Image(painterResource(R.drawable.my_files), stringResource(R.string.my_files), Modifier.size(30.dp)) }
-        IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
-        IconButton(onClick = onPaint) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
+        IconButton(onClick = {}, modifier = Modifier.size(36.dp)) { Image(painterResource(R.drawable.start_search), "Пошук", Modifier.size(30.dp)) }
+        IconButton(onClick = onFiles, modifier = Modifier.size(36.dp)) { Image(painterResource(R.drawable.my_files), stringResource(R.string.my_files), Modifier.size(30.dp)) }
+        IconButton(onClick = onNotepad, modifier = Modifier.size(36.dp)) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
+        IconButton(onClick = onPaint, modifier = Modifier.size(36.dp)) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
         Spacer(Modifier.weight(1f))
         Box {
-        TextButton(onClick = { languageMenu = true }) {
+        TextButton(onClick = { languageMenu = true }, modifier = Modifier.height(36.dp)) {
             Text(
                 when (keyboardLanguage) {
                     "uk" -> "УКР"
@@ -193,7 +193,7 @@ fun WindowsLearningDesktopApp(
                 DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
             }
         }
-        IconButton(onClick = {}) { Image(painterResource(R.drawable.taskbar_sound), "Звук", Modifier.size(24.dp)) }
+        IconButton(onClick = {}, modifier = Modifier.size(36.dp)) { Image(painterResource(R.drawable.taskbar_sound), "Звук", Modifier.size(24.dp)) }
         Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
