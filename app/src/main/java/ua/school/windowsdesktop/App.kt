@@ -42,8 +42,8 @@ import ua.school.windowsdesktop.domain.*
 private sealed interface AppScreen {
     data object Desktop : AppScreen
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
-    data class Notepad(val fileId: String? = null) : AppScreen
-    data class Paint(val fileId: String? = null) : AppScreen
+    data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
+    data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object Trash : AppScreen
 }
 
@@ -77,17 +77,17 @@ fun WindowsLearningDesktopApp(
                         trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
                     )
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
-                        onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it) },
-                        onPaint = { screen = AppScreen.Paint(it) },
+                        onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it, returnFolderId = current.folderId) },
+                        onPaint = { screen = AppScreen.Paint(it, returnFolderId = current.folderId) },
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         showFileExtensions = showFileExtensions)
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
+                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
                         onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions)
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onClose = { screen = AppScreen.Explorer(current.fileId?.let(snapshot.nodes::get)?.parentId ?: FileOperations.ROOT_ID) },
+                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
