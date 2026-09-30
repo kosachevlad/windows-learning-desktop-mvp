@@ -177,6 +177,8 @@ fun WindowsLearningDesktopApp(
         IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
         IconButton(onClick = onPaint) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
         Spacer(Modifier.weight(1f))
+        Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
+        IconButton(onClick = {}) { Image(painterResource(R.drawable.taskbar_sound), "Звук", Modifier.size(24.dp)) }
         Box {
         TextButton(onClick = { languageMenu = true }) {
             Text(
@@ -193,7 +195,6 @@ fun WindowsLearningDesktopApp(
                 DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
             }
         }
-        Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
