@@ -392,6 +392,23 @@ private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int
     if (startX !in 0 until bitmap.width || startY !in 0 until bitmap.height) return
     val target = bitmap.getPixel(startX, startY)
     if (target == replacement) return
+
+    // A blank canvas is the common case when filling the whole drawing. Avoid
+    // allocating one queue slot per pixel (which can freeze large displays).
+    var uniform = true
+    val pixels = IntArray(bitmap.width)
+    for (y in 0 until bitmap.height) {
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, y, bitmap.width, 1)
+        if (pixels.any { it != target }) {
+            uniform = false
+            break
+        }
+    }
+    if (uniform) {
+        bitmap.eraseColor(replacement)
+        return
+    }
+
     val queue = IntArray(bitmap.width * bitmap.height)
     var head = 0; var tail = 0
     fun enqueue(x: Int, y: Int) {
