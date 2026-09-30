@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
@@ -146,6 +147,7 @@ fun WindowsLearningDesktopApp(
                 expanded = startMenu,
                 onDismissRequest = { startMenu = false },
                 modifier = Modifier.width(270.dp),
+                offset = DpOffset(0.dp, 72.dp),
             ) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
@@ -269,9 +271,24 @@ fun WindowsLearningDesktopApp(
             TextButton(onClick = { selected?.let { renameTarget = it; newName = displayName(it, showFileExtensions) } }, enabled = selected != null) { Text(stringResource(R.string.rename)) }
             TextButton(onClick = { selected?.let { deleteTarget = it } }, enabled = selected != null) { Text(stringResource(R.string.delete)) }
             Spacer(Modifier.weight(1f))
-            Button(onClick = { createKind = FileKind.FOLDER; newName = "" }) { Text(stringResource(R.string.new_folder)) }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { createKind = FileKind.TEXT; newName = "" }) { Text(stringResource(R.string.new_text_document)) }
+            IconButton(
+                onClick = { createKind = FileKind.FOLDER; newName = "" },
+                modifier = Modifier.size(52.dp),
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    Image(painterResource(R.drawable.folder_icon), stringResource(R.string.new_folder), Modifier.fillMaxSize().padding(4.dp))
+                    Text("+", color = Color.Gray, style = MaterialTheme.typography.titleLarge, modifier = Modifier.align(Alignment.Center))
+                }
+            }
+            IconButton(
+                onClick = { createKind = FileKind.TEXT; newName = "" },
+                modifier = Modifier.size(52.dp),
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    Image(painterResource(R.drawable.text_icon), stringResource(R.string.new_text_document), Modifier.fillMaxSize().padding(4.dp))
+                    Text("+", color = Color.Gray, style = MaterialTheme.typography.titleLarge, modifier = Modifier.align(Alignment.Center))
+                }
+            }
         }
         Box(
             Modifier
