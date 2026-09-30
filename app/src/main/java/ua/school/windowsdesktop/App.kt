@@ -145,10 +145,11 @@ fun WindowsLearningDesktopApp(
             DropdownMenu(
                 expanded = startMenu,
                 onDismissRequest = { startMenu = false },
-                modifier = Modifier.width(270.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                modifier = Modifier.width(270.dp),
             ) {
-                data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
-                listOf(
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
+                    listOf(
                     StartApp("Блокнот", R.drawable.notepad) { startMenu = false; onNotepad() },
                     StartApp("Excel", R.drawable.start_excel),
                     StartApp("Google Chrome", R.drawable.start_chrome),
@@ -159,12 +160,13 @@ fun WindowsLearningDesktopApp(
                     StartApp("PowerPoint", R.drawable.start_powerpoint),
                     StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
                     StartApp("Word", R.drawable.start_word),
-                ).sortedBy { it.name.lowercase() }.forEach { app ->
+                    ).sortedBy { it.name.lowercase() }.forEach { app ->
                     DropdownMenuItem(
                         text = { Text(app.name) },
                         leadingIcon = { Icon(painterResource(app.icon), null, Modifier.size(28.dp), tint = Color.Unspecified) },
                         onClick = app.action,
                     )
+                    }
                 }
             }
         }
