@@ -147,7 +147,7 @@ fun WindowsLearningDesktopApp(
                 expanded = startMenu,
                 onDismissRequest = { startMenu = false },
                 modifier = Modifier.width(270.dp),
-                offset = DpOffset(0.dp, 132.dp),
+                offset = DpOffset(0.dp, 160.dp),
             ) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
@@ -177,8 +177,6 @@ fun WindowsLearningDesktopApp(
         IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
         IconButton(onClick = onPaint) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
         Spacer(Modifier.weight(1f))
-        Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
-        IconButton(onClick = {}) { Image(painterResource(R.drawable.taskbar_sound), "Звук", Modifier.size(24.dp)) }
         Box {
         TextButton(onClick = { languageMenu = true }) {
             Text(
@@ -195,6 +193,8 @@ fun WindowsLearningDesktopApp(
                 DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
             }
         }
+        IconButton(onClick = {}) { Image(painterResource(R.drawable.taskbar_sound), "Звук", Modifier.size(24.dp)) }
+        Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
