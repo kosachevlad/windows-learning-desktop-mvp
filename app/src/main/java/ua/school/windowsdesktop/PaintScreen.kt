@@ -41,6 +41,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import java.io.ByteArrayOutputStream
@@ -49,7 +52,7 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
 
-internal enum class PaintTool { SELECT, PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
+internal enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
 internal data class PaintAction(
     val tool: PaintTool,
     val points: List<Offset>,
@@ -176,15 +179,14 @@ fun PaintScreen(
             }
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().background(Color.White).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ToolButton(stringResource(R.string.select_tool), tool == PaintTool.SELECT) { tool = PaintTool.SELECT }
-                    ToolButton(stringResource(R.string.pencil), tool == PaintTool.PENCIL) { selectedActionIndex = null; tool = PaintTool.PENCIL }
-                    ToolButton(stringResource(R.string.brush), tool == PaintTool.BRUSH) { selectedActionIndex = null; tool = PaintTool.BRUSH }
-                    ToolButton(stringResource(R.string.eraser), tool == PaintTool.ERASER) { selectedActionIndex = null; tool = PaintTool.ERASER }
-                    ToolButton(stringResource(R.string.fill), tool == PaintTool.FILL) { selectedActionIndex = null; tool = PaintTool.FILL }
-                    ToolButton(stringResource(R.string.line), tool == PaintTool.LINE) { selectedActionIndex = null; tool = PaintTool.LINE }
-                    ToolButton(stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { selectedActionIndex = null; tool = PaintTool.RECTANGLE }
-                    ToolButton(stringResource(R.string.oval), tool == PaintTool.OVAL) { selectedActionIndex = null; tool = PaintTool.OVAL }
-                    ToolButton(stringResource(R.string.text_tool), tool == PaintTool.TEXT) { selectedActionIndex = null; tool = PaintTool.TEXT }
+                    ToolButton(R.drawable.paint_pencil, stringResource(R.string.pencil), tool == PaintTool.PENCIL) { selectedActionIndex = null; tool = PaintTool.PENCIL }
+                    ToolButton(R.drawable.paint_brush, stringResource(R.string.brush), tool == PaintTool.BRUSH) { selectedActionIndex = null; tool = PaintTool.BRUSH }
+                    ToolButton(R.drawable.paint_eraser, stringResource(R.string.eraser), tool == PaintTool.ERASER) { selectedActionIndex = null; tool = PaintTool.ERASER }
+                    ToolButton(R.drawable.paint_fill, stringResource(R.string.fill), tool == PaintTool.FILL) { selectedActionIndex = null; tool = PaintTool.FILL }
+                    ToolButton(R.drawable.paint_line, stringResource(R.string.line), tool == PaintTool.LINE) { selectedActionIndex = null; tool = PaintTool.LINE }
+                    ToolButton(R.drawable.paint_rectangle, stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { selectedActionIndex = null; tool = PaintTool.RECTANGLE }
+                    ToolButton(R.drawable.paint_oval, stringResource(R.string.oval), tool == PaintTool.OVAL) { selectedActionIndex = null; tool = PaintTool.OVAL }
+                    ToolButton(R.drawable.paint_text, stringResource(R.string.text_tool), tool == PaintTool.TEXT) { selectedActionIndex = null; tool = PaintTool.TEXT }
                 }
                 if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else {
@@ -240,7 +242,6 @@ fun PaintScreen(
                             return@awaitEachGesture
                         }
                         val gestureTool = tool
-                        if (gestureTool == PaintTool.SELECT) return@awaitEachGesture
                         if (gestureTool == PaintTool.TEXT || gestureTool == PaintTool.FILL) {
                             var released = false
                             do {
@@ -335,8 +336,25 @@ fun PaintScreen(
     ) }
 }
 
-@Composable private fun ToolButton(label: String, selected: Boolean, action: () -> Unit) =
-    TextButton(onClick = action, colors = ButtonDefaults.textButtonColors(containerColor = if (selected) Color(0xFFCDE8FF) else Color.Transparent)) { Text(label) }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolButton(icon: Int, label: String, selected: Boolean, action: () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(
+            onClick = action,
+            modifier = Modifier.size(48.dp).semantics { this.selected = selected },
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = if (selected) Color(0xFFCDE8FF) else Color.Transparent,
+            ),
+        ) {
+            Icon(painterResource(icon), contentDescription = label, modifier = Modifier.size(24.dp), tint = Color.Unspecified)
+        }
+    }
+}
 
 private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>): ByteArray {
     val bitmap = renderBitmap(size, base, actions)
@@ -352,7 +370,6 @@ private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction
         val start = action.points.firstOrNull() ?: return@forEach
         val end = action.points.lastOrNull() ?: return@forEach
         when (action.tool) {
-            PaintTool.SELECT -> Unit
             PaintTool.PENCIL, PaintTool.BRUSH, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
             PaintTool.FILL -> floodFill(bitmap, start.x.toInt(), start.y.toInt(), action.color)
             PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
