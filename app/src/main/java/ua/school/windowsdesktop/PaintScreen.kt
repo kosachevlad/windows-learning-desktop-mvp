@@ -396,10 +396,10 @@ private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int
     // A blank canvas is the common case when filling the whole drawing. Avoid
     // allocating one queue slot per pixel (which can freeze large displays).
     var uniform = true
-    val pixels = IntArray(bitmap.width)
+    val rowPixels = IntArray(bitmap.width)
     for (y in 0 until bitmap.height) {
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, y, bitmap.width, 1)
-        if (pixels.any { it != target }) {
+        bitmap.getPixels(rowPixels, 0, bitmap.width, 0, y, bitmap.width, 1)
+        if (rowPixels.any { it != target }) {
             uniform = false
             break
         }
@@ -409,11 +409,15 @@ private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int
         return
     }
 
-    val queue = IntArray(bitmap.width * bitmap.height)
+    val pixels = IntArray(bitmap.width * bitmap.height)
+    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+    var queue = IntArray(minOf(4096, pixels.size.coerceAtLeast(1)))
     var head = 0; var tail = 0
     fun enqueue(x: Int, y: Int) {
-        if (x in 0 until bitmap.width && y in 0 until bitmap.height && bitmap.getPixel(x, y) == target) {
-            bitmap.setPixel(x, y, replacement)
+        val index = y * bitmap.width + x
+        if (x in 0 until bitmap.width && y in 0 until bitmap.height && pixels[index] == target) {
+            pixels[index] = replacement
+            if (tail == queue.size) queue = queue.copyOf(queue.size * 2)
             queue[tail++] = y * bitmap.width + x
         }
     }
@@ -423,6 +427,7 @@ private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int
         val x = value % bitmap.width; val y = value / bitmap.width
         enqueue(x + 1, y); enqueue(x - 1, y); enqueue(x, y + 1); enqueue(x, y - 1)
     }
+    bitmap.setPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
 }
 
 private fun constrainedSquareEnd(start: Offset, end: Offset): Offset {
