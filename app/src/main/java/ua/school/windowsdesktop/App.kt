@@ -188,7 +188,11 @@ fun WindowsLearningDesktopApp(
                 color = Color.White,
             )
         }
-            DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+            DropdownMenu(
+                expanded = languageMenu,
+                onDismissRequest = { languageMenu = false },
+                offset = DpOffset(0.dp, 220.dp),
+            ) {
                 DropdownMenuItem(text = { Text("Українська") }, onClick = { onKeyboardLanguage("uk"); languageMenu = false })
                 DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
             }
