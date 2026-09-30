@@ -141,13 +141,13 @@ fun WindowsLearningDesktopApp(
     ) {
         Box {
             IconButton(onClick = { startMenu = !startMenu }) {
-                Image(painterResource(R.drawable.start_btn), "Пуск", Modifier.size(32.dp))
+                Image(painterResource(R.drawable.start_btn), "Пуск", Modifier.size(48.dp))
             }
             DropdownMenu(
                 expanded = startMenu,
                 onDismissRequest = { startMenu = false },
                 modifier = Modifier.width(270.dp),
-                offset = DpOffset(0.dp, 72.dp),
+                offset = DpOffset(0.dp, 132.dp),
             ) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
@@ -172,7 +172,7 @@ fun WindowsLearningDesktopApp(
                 }
             }
         }
-        TextButton(onClick = {}) { Text("⌕", color = Color.White) }
+        IconButton(onClick = {}) { Image(painterResource(R.drawable.start_search), "Пошук", Modifier.size(30.dp)) }
         IconButton(onClick = onFiles) { Image(painterResource(R.drawable.my_files), stringResource(R.string.my_files), Modifier.size(30.dp)) }
         IconButton(onClick = onNotepad) { Image(painterResource(R.drawable.notepad), stringResource(R.string.notepad), Modifier.size(30.dp)) }
         IconButton(onClick = onPaint) { Image(painterResource(R.drawable.paint), "Paint", Modifier.size(30.dp)) }
