@@ -147,7 +147,7 @@ fun WindowsLearningDesktopApp(
                 expanded = startMenu,
                 onDismissRequest = { startMenu = false },
                 modifier = Modifier.width(270.dp),
-                offset = DpOffset(0.dp, 220.dp),
+                offset = DpOffset(0.dp, 0.dp),
             ) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     data class StartApp(val name: String, val icon: Int, val action: () -> Unit = {})
@@ -191,7 +191,7 @@ fun WindowsLearningDesktopApp(
             DropdownMenu(
                 expanded = languageMenu,
                 onDismissRequest = { languageMenu = false },
-                offset = DpOffset(0.dp, 220.dp),
+                offset = DpOffset(0.dp, 0.dp),
             ) {
                 DropdownMenuItem(text = { Text("Українська") }, onClick = { onKeyboardLanguage("uk"); languageMenu = false })
                 DropdownMenuItem(text = { Text("English") }, onClick = { onKeyboardLanguage("en"); languageMenu = false })
