@@ -704,7 +704,8 @@ fun WindowsLearningDesktopApp(
     LaunchedEffect(player, playing) {
         while (playing) { position = player?.currentPosition ?: 0; delay(250) }
     }
-    DisposableEffect(player) { onDispose { player?.release() } }
+    val currentPlayer = player
+    DisposableEffect(currentPlayer) { onDispose { currentPlayer?.release() } }
     BackHandler(onBack = onClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4))) {
         WindowTitle("Музика", onClose)
