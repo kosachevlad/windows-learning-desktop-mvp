@@ -7,6 +7,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
+import android.net.Uri
 import java.io.File
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.viewinterop.AndroidView
@@ -690,7 +691,10 @@ fun WindowsLearningDesktopApp(
         if (file != null) {
             val audioFile = File(context.cacheDir, "learning-${file.id}.mp3")
             audioFile.writeBytes(repository.readPaint(file.id))
-            player = MediaPlayer().apply { setDataSource(audioFile.absolutePath); prepare(); duration = this.duration }
+            player = MediaPlayer.create(context, Uri.fromFile(audioFile))?.also { prepared ->
+                duration = prepared.duration.coerceAtLeast(1)
+                prepared.setOnCompletionListener { playing = false; position = 0 }
+            }
         }
     }
     LaunchedEffect(player, playing) {
@@ -703,10 +707,16 @@ fun WindowsLearningDesktopApp(
         Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(painterResource(R.drawable.music_icon), "Музика", Modifier.size(96.dp))
             Text(file?.name ?: "Музичний файл", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
-            Slider(value = position.toFloat(), onValueChange = { value -> position = value.toInt(); player?.seekTo(position) }, valueRange = 0f..duration.coerceAtLeast(1).toFloat())
+            Slider(value = position.toFloat(), onValueChange = { value -> position = value.toInt(); player?.let { runCatching { it.seekTo(position) } } }, valueRange = 0f..duration.coerceAtLeast(1).toFloat())
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { player?.start(); playing = true }, enabled = player != null) { Text("▶ Play") }
-                Button(onClick = { player?.pause(); playing = false }, enabled = player != null) { Text("Ⅱ Pause") }
+                Button(onClick = {
+                    player?.let { media ->
+                        runCatching { if (!media.isPlaying) media.start() }.onSuccess { playing = true }
+                    }
+                }, enabled = player != null) { Text("▶ Play") }
+                Button(onClick = {
+                    player?.let { media -> runCatching { if (media.isPlaying) media.pause() }.onSuccess { playing = false } }
+                }, enabled = player != null) { Text("Ⅱ Pause") }
             }
         }
     }
