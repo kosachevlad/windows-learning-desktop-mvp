@@ -36,6 +36,7 @@ internal fun DesktopScreen(
     onNotepad: () -> Unit,
     onTrash: () -> Unit,
     onPaint: () -> Unit,
+    onBrowser: () -> Unit,
     onFolder: (String) -> Unit,
     onText: (String) -> Unit,
     onPaintFile: (String) -> Unit,

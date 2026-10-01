@@ -1,6 +1,11 @@
 package ua.school.windowsdesktop
 
 import androidx.activity.compose.BackHandler
+import android.annotation.SuppressLint
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -49,6 +54,7 @@ private sealed interface AppScreen {
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object SystemInfo : AppScreen
     data object Trash : AppScreen
+    data object Browser : AppScreen
 }
 
 @Composable
@@ -75,6 +81,7 @@ fun WindowsLearningDesktopApp(
                         onNotepad = { screen = AppScreen.Notepad() },
                         onTrash = { screen = AppScreen.Trash },
                         onPaint = { screen = AppScreen.Paint() },
+                        onBrowser = { screen = AppScreen.Browser },
                         onFolder = { screen = AppScreen.Explorer(it) },
                         onText = { screen = AppScreen.Notepad(it) },
                         onPaintFile = { screen = AppScreen.Paint(it) },
@@ -99,6 +106,7 @@ fun WindowsLearningDesktopApp(
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         showFileExtensions = showFileExtensions)
+                    AppScreen.Browser -> BrowserScreen(onClose = { screen = AppScreen.Desktop })
                 }
             }
             Taskbar(
@@ -108,6 +116,7 @@ fun WindowsLearningDesktopApp(
                 onFiles = { screen = AppScreen.Explorer() },
                 onNotepad = { screen = AppScreen.Notepad() },
                 onPaint = { screen = AppScreen.Paint() },
+                onBrowser = { screen = AppScreen.Browser },
             )
         }
         }
@@ -124,6 +133,7 @@ fun WindowsLearningDesktopApp(
     onFiles: () -> Unit,
     onNotepad: () -> Unit,
     onPaint: () -> Unit,
+    onBrowser: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
     var startMenu by remember { mutableStateOf(false) }
@@ -154,7 +164,7 @@ fun WindowsLearningDesktopApp(
                     listOf(
                     StartApp("Блокнот", R.drawable.notepad) { startMenu = false; onNotepad() },
                     StartApp("Excel", R.drawable.start_excel),
-                    StartApp("Google Chrome", R.drawable.start_chrome),
+                    StartApp("Google Chrome", R.drawable.start_chrome) { startMenu = false; onBrowser() },
                     StartApp("Календар", R.drawable.start_calendar),
                     StartApp("Калькулятор", R.drawable.start_calculator),
                     StartApp("Мої файли", R.drawable.my_files) { startMenu = false; onFiles() },
@@ -199,6 +209,56 @@ fun WindowsLearningDesktopApp(
         }
         IconButton(onClick = {}, modifier = Modifier.size(36.dp)) { Image(painterResource(R.drawable.taskbar_sound), "Звук", Modifier.size(24.dp)) }
         Text(clockText, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable private fun BrowserScreen(onClose: () -> Unit) {
+    var address by remember { mutableStateOf("home.local") }
+    var webView by remember { mutableStateOf<WebView?>(null) }
+    fun loadAddress(value: String) {
+        val host = value.trim().lowercase().removePrefix("https://").removePrefix("http://").trimEnd('/')
+        address = host
+        val page = when (host) {
+            "home.local", "" -> "home.html"
+            "school.local" -> "school.html"
+            "wiki.local" -> "wiki.html"
+            "weather.local" -> "weather.html"
+            "search.local" -> "search.html"
+            else -> null
+        }
+        if (page == null) webView?.loadDataWithBaseURL(null, "<html><body style='font-family:sans-serif;padding:32px'><h1>Сторінку не знайдено</h1><p>Адреса <b>$host</b> не існує в офлайн-браузері.</p></body></html>", "text/html", "UTF-8", null)
+        else webView?.loadUrl("file:///android_asset/browser/$page")
+    }
+    BackHandler(enabled = webView?.canGoBack() == true) { webView?.goBack() }
+    Column(Modifier.fillMaxSize().background(Color.White)) {
+        WindowTitle("Браузер", onClose)
+        Row(Modifier.fillMaxWidth().background(Color(0xFFE8E8E8)).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { webView?.goBack() }, enabled = webView?.canGoBack() == true) { Text("‹") }
+            TextButton(onClick = { webView?.goForward() }, enabled = webView?.canGoForward() == true) { Text("›") }
+            TextButton(onClick = { loadAddress(address) }) { Text("↻") }
+            TextButton(onClick = { loadAddress("home.local") }) { Text("⌂") }
+            OutlinedTextField(address, { address = it }, Modifier.weight(1f), singleLine = true,
+                label = { Text("Адрес") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { loadAddress(address) }))
+        }
+        AndroidView(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            factory = { context -> WebView(context).apply {
+                settings.javaScriptEnabled = false
+                settings.domStorageEnabled = false
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                        val target = request.url.toString().removePrefix("browser://")
+                        loadAddress(target)
+                        return true
+                    }
+                }
+                webView = this
+                loadAddress("home.local")
+            } },
+            update = { webView = it },
+        )
     }
 }
 
