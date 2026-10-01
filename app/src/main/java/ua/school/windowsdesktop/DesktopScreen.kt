@@ -74,7 +74,9 @@ internal fun DesktopScreen(
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося створити об’єкт") } }
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0078D7)).onSecondaryClick { point ->
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0078D7)).onLongPressContext { point ->
+        selectedId = null; backgroundMenu = point
+    }.onSecondaryClick { point ->
         selectedId = null; backgroundMenu = point
     }) {
         val rows = ((maxHeight.value - 12f) / 100f).toInt().coerceAtLeast(1)
@@ -147,6 +149,7 @@ internal fun DesktopScreen(
     var menuPosition by remember { mutableStateOf<Offset?>(null) }
     Box(Modifier.offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }.width(96.dp)
         .background(if (selected) Color(0x6633A7FF) else Color.Transparent)
+        .onLongPressContext { menuPosition = it; onSelect() }
         .onSecondaryClick(PointerEventPass.Initial) { menuPosition = it; onSelect() }) {
         Column(Modifier.fillMaxWidth().combinedClickable(onClick = onSelect, onDoubleClick = onOpen).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(painterResource(fileIcon(node)), null, Modifier.size(58.dp))

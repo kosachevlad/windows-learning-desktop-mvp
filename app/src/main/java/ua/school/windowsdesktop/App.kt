@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
@@ -370,6 +371,10 @@ fun WindowsLearningDesktopApp(
             Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .onLongPressContext { position ->
+                    selectedId = null
+                    backgroundMenuPosition = position
+                }
                 .onSecondaryClick { position ->
                     selectedId = null
                     backgroundMenuPosition = position
@@ -519,6 +524,10 @@ fun WindowsLearningDesktopApp(
     Box(
         Modifier
             .width(760.dp)
+            .onLongPressContext { position ->
+                select()
+                menuPosition = position
+            }
             .onSecondaryClick(PointerEventPass.Initial) { position ->
                 select()
                 menuPosition = position
@@ -744,6 +753,11 @@ internal fun Modifier.onSecondaryClick(
                 }
             }
         }
+    }
+
+internal fun Modifier.onLongPressContext(action: (Offset) -> Unit): Modifier =
+    pointerInput(action) {
+        detectTapGestures(onLongPress = action)
     }
 
 internal fun Modifier.dialogKeys(
