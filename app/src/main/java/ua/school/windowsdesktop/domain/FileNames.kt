@@ -17,7 +17,7 @@ internal object FileNames {
             FileKind.TEXT -> ".txt"
             FileKind.PAINT -> ".png"
         }
-        if (kind == FileKind.PAINT && (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true))) {
+        if (kind == FileKind.PAINT && (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true) || name.endsWith(".mp3", true))) {
             // Imported photos keep their original JPEG extension.
         } else if (extension.isNotEmpty() && !name.endsWith(extension, ignoreCase = true)) {
             if ('.' in name) throw FileOperationException(FileError.INVALID_EXTENSION)

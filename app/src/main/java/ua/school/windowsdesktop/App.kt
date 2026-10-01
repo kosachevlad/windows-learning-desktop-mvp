@@ -6,6 +6,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.graphics.BitmapFactory
+import android.media.MediaPlayer
+import java.io.File
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
@@ -61,6 +63,7 @@ private sealed interface AppScreen {
     data object Trash : AppScreen
     data object Browser : AppScreen
     data class Photo(val fileId: String) : AppScreen
+    data class Music(val fileId: String) : AppScreen
 }
 
 @Composable
@@ -94,6 +97,11 @@ fun WindowsLearningDesktopApp(
                 repository.createPaint(name, pictures.id, bytes)
             }
         }
+        val musicFolder = rootChildren.firstOrNull { it.kind == FileKind.FOLDER && it.name == "Музика" }
+        if (musicFolder != null && repository.children(musicFolder.id).none { it.name.endsWith(".mp3", true) }) {
+            val bytes = context.assets.open("music/vivaldi-winter.mp3").use { it.readBytes() }
+            repository.createPaint("Антоніо Вівальді — Зима.mp3", musicFolder.id, bytes)
+        }
     }
     MaterialTheme {
         DesktopViewport {
@@ -120,6 +128,7 @@ fun WindowsLearningDesktopApp(
                         onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it, returnFolderId = current.folderId) },
                         onPaint = { screen = AppScreen.Paint(it, returnFolderId = current.folderId) },
                         onPhoto = { screen = AppScreen.Photo(it) },
+                        onMusic = { screen = AppScreen.Music(it) },
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         showFileExtensions = showFileExtensions)
@@ -136,6 +145,7 @@ fun WindowsLearningDesktopApp(
                         showFileExtensions = showFileExtensions)
                     AppScreen.Browser -> BrowserScreen(onClose = { screen = AppScreen.Desktop })
                     is AppScreen.Photo -> PhotoScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Explorer(FileOperations.ROOT_ID) })
+                    is AppScreen.Music -> MusicScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Desktop })
                 }
             }
             Taskbar(
@@ -146,6 +156,7 @@ fun WindowsLearningDesktopApp(
                 onNotepad = { screen = AppScreen.Notepad() },
                 onPaint = { screen = AppScreen.Paint() },
                 onBrowser = { screen = AppScreen.Browser },
+                onMusic = { screen = AppScreen.Music(snapshot.nodes.values.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "") },
             )
         }
         }
@@ -163,6 +174,7 @@ fun WindowsLearningDesktopApp(
     onNotepad: () -> Unit,
     onPaint: () -> Unit,
     onBrowser: () -> Unit,
+    onMusic: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
     var startMenu by remember { mutableStateOf(false) }
@@ -197,6 +209,7 @@ fun WindowsLearningDesktopApp(
                     StartApp("Календар", R.drawable.start_calendar),
                     StartApp("Калькулятор", R.drawable.start_calculator),
                     StartApp("Мої файли", R.drawable.my_files) { startMenu = false; onFiles() },
+                    StartApp("Музика", R.drawable.music_icon) { startMenu = false; onMusic() },
                     StartApp("Paint", R.drawable.paint) { startMenu = false; onPaint() },
                     StartApp("PowerPoint", R.drawable.start_powerpoint),
                     StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
@@ -304,7 +317,7 @@ fun WindowsLearningDesktopApp(
 
 @Composable private fun ExplorerScreen(
     repository: LearningFileRepository, folderId: String, nodes: List<FileNode>,
-    onFolder: (String) -> Unit, onText: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit,
+    onFolder: (String) -> Unit, onText: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit, onMusic: (String) -> Unit,
     onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
     showFileExtensions: Boolean,
@@ -325,7 +338,11 @@ fun WindowsLearningDesktopApp(
     val selected = children.firstOrNull { it.id == selectedId }
     fun openNode(node: FileNode) { when (node.kind) {
         FileKind.FOLDER -> onFolder(node.id); FileKind.TEXT -> onText(node.id)
-        FileKind.PAINT -> if (node.name.endsWith(".jpg", true) || node.name.endsWith(".jpeg", true)) onPhoto(node.id) else onPaint(node.id)
+        FileKind.PAINT -> when {
+            node.name.endsWith(".jpg", true) || node.name.endsWith(".jpeg", true) -> onPhoto(node.id)
+            node.name.endsWith(".mp3", true) -> onMusic(node.id)
+            else -> onPaint(node.id)
+        }
     } }
     fun openSelected() { selected?.let(::openNode) }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
@@ -546,10 +563,11 @@ fun WindowsLearningDesktopApp(
     node: FileNode, showFileExtensions: Boolean, selected: Boolean, select: () -> Unit, open: () -> Unit,
     openWithPaint: (() -> Unit)? = null, copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
 ) {
-    val type = when (node.kind) {
-        FileKind.FOLDER -> stringResource(R.string.file_folder)
-        FileKind.TEXT -> stringResource(R.string.text_document)
-        FileKind.PAINT -> stringResource(R.string.paint_image)
+    val type = when {
+        node.name.endsWith(".mp3", true) -> "Музичний файл"
+        node.kind == FileKind.FOLDER -> stringResource(R.string.file_folder)
+        node.kind == FileKind.TEXT -> stringResource(R.string.text_document)
+        else -> stringResource(R.string.paint_image)
     }
     var menuPosition by remember { mutableStateOf<Offset?>(null) }
     Box(
@@ -662,6 +680,38 @@ fun WindowsLearningDesktopApp(
     )
 }
 
+@Composable private fun MusicScreen(repository: LearningFileRepository, file: FileNode?, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var player by remember(file?.id) { mutableStateOf<MediaPlayer?>(null) }
+    var duration by remember(file?.id) { mutableIntStateOf(1) }
+    var position by remember(file?.id) { mutableIntStateOf(0) }
+    var playing by remember(file?.id) { mutableStateOf(false) }
+    LaunchedEffect(file?.id) {
+        if (file != null) {
+            val audioFile = File(context.cacheDir, "learning-${file.id}.mp3")
+            audioFile.writeBytes(repository.readPaint(file.id))
+            player = MediaPlayer().apply { setDataSource(audioFile.absolutePath); prepare(); duration = this.duration }
+        }
+    }
+    LaunchedEffect(player, playing) {
+        while (playing) { position = player?.currentPosition ?: 0; delay(250) }
+    }
+    DisposableEffect(player) { onDispose { player?.release() } }
+    BackHandler(onBack = onClose)
+    Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4))) {
+        WindowTitle("Музика", onClose)
+        Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(painterResource(R.drawable.music_icon), "Музика", Modifier.size(96.dp))
+            Text(file?.name ?: "Музичний файл", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
+            Slider(value = position.toFloat(), onValueChange = { value -> position = value.toInt(); player?.seekTo(position) }, valueRange = 0f..duration.coerceAtLeast(1).toFloat())
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { player?.start(); playing = true }, enabled = player != null) { Text("▶ Play") }
+                Button(onClick = { player?.pause(); playing = false }, enabled = player != null) { Text("Ⅱ Pause") }
+            }
+        }
+    }
+}
+
 @Composable private fun PhotoScreen(repository: LearningFileRepository, file: FileNode?, onClose: () -> Unit) {
     var bytes by remember(file?.id) { mutableStateOf<ByteArray?>(null) }
     LaunchedEffect(file?.id) { if (file != null) bytes = repository.readPaint(file.id) }
@@ -769,14 +819,14 @@ internal fun displayName(node: FileNode, showFileExtensions: Boolean): String =
 
 internal fun displayFileName(name: String, kind: FileKind, showFileExtensions: Boolean): String {
     if (showFileExtensions || kind == FileKind.FOLDER) return name
-    val extension = when (kind) { FileKind.TEXT -> ".txt"; FileKind.PAINT -> if (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true)) name.takeLast(4) else ".png"; FileKind.FOLDER -> "" }
+    val extension = when (kind) { FileKind.TEXT -> ".txt"; FileKind.PAINT -> when { name.endsWith(".jpg", true) -> ".jpg"; name.endsWith(".jpeg", true) -> ".jpeg"; name.endsWith(".mp3", true) -> ".mp3"; else -> ".png" }; FileKind.FOLDER -> "" }
     return if (name.endsWith(extension, ignoreCase = true)) name.dropLast(extension.length) else name
 }
 
 internal fun fileIcon(node: FileNode): Int = when (node.kind) {
     FileKind.FOLDER -> R.drawable.folder_icon
     FileKind.TEXT -> R.drawable.text_icon
-    FileKind.PAINT -> R.drawable.image_icon
+    FileKind.PAINT -> if (node.name.endsWith(".mp3", true)) R.drawable.music_icon else R.drawable.image_icon
 }
 
 internal fun Modifier.onSecondaryClick(
