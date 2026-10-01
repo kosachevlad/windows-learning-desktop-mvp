@@ -555,10 +555,6 @@ fun WindowsLearningDesktopApp(
     Box(
         Modifier
             .width(760.dp)
-            .onLongPressContext { position ->
-                select()
-                menuPosition = position
-            }
             .onSecondaryClick(PointerEventPass.Initial) { position ->
                 select()
                 menuPosition = position
@@ -568,8 +564,11 @@ fun WindowsLearningDesktopApp(
             Modifier
                 .width(760.dp)
                 .background(if (selected) Color(0xFFCDE8FF) else Color.Transparent)
-                .onLongPressContext { position -> select(); menuPosition = position }
-                .combinedClickable(onClick = select, onDoubleClick = open)
+                .combinedClickable(
+                    onClick = select,
+                    onDoubleClick = open,
+                    onLongClick = { select(); menuPosition = Offset(8f, 8f) },
+                )
                 .padding(vertical = 10.dp)
                 .semantics { contentDescription = displayName(node, showFileExtensions) }
         ) {
