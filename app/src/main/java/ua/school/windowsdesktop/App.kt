@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.graphics.BitmapFactory
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
@@ -23,11 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +59,7 @@ private sealed interface AppScreen {
     data object SystemInfo : AppScreen
     data object Trash : AppScreen
     data object Browser : AppScreen
+    data class Photo(val fileId: String) : AppScreen
 }
 
 @Composable
@@ -69,6 +73,25 @@ fun WindowsLearningDesktopApp(
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
     var showFileExtensions by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    LaunchedEffect(repository) {
+        val standardFolders = listOf("Відеозаписи", "Документи", "Завантаження", "Зображення", "Музика")
+        var rootChildren = repository.children(FileOperations.ROOT_ID)
+        standardFolders.forEach { name ->
+            if (rootChildren.none { it.kind == FileKind.FOLDER && it.name == name }) {
+                repository.createFolder(name, FileOperations.ROOT_ID)
+            }
+        }
+        rootChildren = repository.children(FileOperations.ROOT_ID)
+        val pictures = rootChildren.firstOrNull { it.kind == FileKind.FOLDER && it.name == "Зображення" }
+        if (pictures != null && repository.children(pictures.id).none { it.name.endsWith(".jpg", true) }) {
+            val photos = listOf("Україна.jpg" to "image1.png", "Україна єдина.jpg" to "image2.png", "Квіти.jpg" to "image5.png", "Друзі.jpg" to "image7.png")
+            photos.forEach { (name, asset) ->
+                val bytes = context.assets.open("browser/images/$asset").use { it.readBytes() }
+                repository.createPaint(name, pictures.id, bytes)
+            }
+        }
+    }
     MaterialTheme {
         DesktopViewport {
         Column(Modifier.fillMaxSize()) {
@@ -93,6 +116,7 @@ fun WindowsLearningDesktopApp(
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
                         onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it, returnFolderId = current.folderId) },
                         onPaint = { screen = AppScreen.Paint(it, returnFolderId = current.folderId) },
+                        onPhoto = { screen = AppScreen.Photo(it) },
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         showFileExtensions = showFileExtensions)
@@ -108,6 +132,7 @@ fun WindowsLearningDesktopApp(
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         showFileExtensions = showFileExtensions)
                     AppScreen.Browser -> BrowserScreen(onClose = { screen = AppScreen.Desktop })
+                    is AppScreen.Photo -> PhotoScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Explorer(FileOperations.ROOT_ID) })
                 }
             }
             Taskbar(
@@ -276,7 +301,7 @@ fun WindowsLearningDesktopApp(
 
 @Composable private fun ExplorerScreen(
     repository: LearningFileRepository, folderId: String, nodes: List<FileNode>,
-    onFolder: (String) -> Unit, onText: (String) -> Unit, onPaint: (String) -> Unit,
+    onFolder: (String) -> Unit, onText: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit,
     onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
     showFileExtensions: Boolean,
@@ -297,7 +322,7 @@ fun WindowsLearningDesktopApp(
     val selected = children.firstOrNull { it.id == selectedId }
     fun openNode(node: FileNode) { when (node.kind) {
         FileKind.FOLDER -> onFolder(node.id); FileKind.TEXT -> onText(node.id)
-        FileKind.PAINT -> onPaint(node.id)
+        FileKind.PAINT -> if (node.name.endsWith(".jpg", true) || node.name.endsWith(".jpeg", true)) onPhoto(node.id) else onPaint(node.id)
     } }
     fun openSelected() { selected?.let(::openNode) }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
@@ -401,6 +426,9 @@ fun WindowsLearningDesktopApp(
                             selectedId = node.id
                             openNode(node)
                         },
+                        openWithPaint = if (node.name.endsWith(".jpg", true) || node.name.endsWith(".jpeg", true)) {
+                            { selectedId = node.id; onPaint(node.id) }
+                        } else null,
                         copy = {
                             selectedId = node.id
                             scope.launch {
@@ -513,7 +541,7 @@ fun WindowsLearningDesktopApp(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun FileRow(
     node: FileNode, showFileExtensions: Boolean, selected: Boolean, select: () -> Unit, open: () -> Unit,
-    copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
+    openWithPaint: (() -> Unit)? = null, copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
 ) {
     val type = when (node.kind) {
         FileKind.FOLDER -> stringResource(R.string.file_folder)
@@ -537,6 +565,7 @@ fun WindowsLearningDesktopApp(
             Modifier
                 .width(760.dp)
                 .background(if (selected) Color(0xFFCDE8FF) else Color.Transparent)
+                .onLongPressContext { position -> select(); menuPosition = position }
                 .combinedClickable(onClick = select, onDoubleClick = open)
                 .padding(vertical = 10.dp)
                 .semantics { contentDescription = displayName(node, showFileExtensions) }
@@ -563,6 +592,7 @@ fun WindowsLearningDesktopApp(
         ) {
             DropdownMenu(expanded = true, onDismissRequest = { menuPosition = null }) {
                 DropdownMenuItem(text = { Text(stringResource(R.string.open)) }, onClick = { menuPosition = null; open() })
+                openWithPaint?.let { paint -> DropdownMenuItem(text = { Text("Відкрити за допомогою Paint") }, onClick = { menuPosition = null; paint() }) }
                 DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { menuPosition = null; copy() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menuPosition = null; rename() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menuPosition = null; delete() })
@@ -628,6 +658,20 @@ fun WindowsLearningDesktopApp(
         } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.empty_recycle_bin)) } },
         dismissButton = { TextButton(onClick = { confirmEmpty = false }) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+@Composable private fun PhotoScreen(repository: LearningFileRepository, file: FileNode?, onClose: () -> Unit) {
+    var bytes by remember(file?.id) { mutableStateOf<ByteArray?>(null) }
+    LaunchedEffect(file?.id) { if (file != null) bytes = repository.readPaint(file.id) }
+    BackHandler(onBack = onClose)
+    Column(Modifier.fillMaxSize().background(Color(0xFF202020))) {
+        WindowTitle(file?.name ?: "Фото", onClose)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            bytes?.let { data -> BitmapFactory.decodeByteArray(data, 0, data.size)?.let { bitmap ->
+                Image(bitmap.asImageBitmap(), file?.name ?: "Фото", Modifier.fillMaxSize().padding(16.dp), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+            } } ?: CircularProgressIndicator(color = Color.White)
+        }
+    }
 }
 
 @Composable private fun NotepadScreen(
@@ -723,7 +767,7 @@ internal fun displayName(node: FileNode, showFileExtensions: Boolean): String =
 
 internal fun displayFileName(name: String, kind: FileKind, showFileExtensions: Boolean): String {
     if (showFileExtensions || kind == FileKind.FOLDER) return name
-    val extension = when (kind) { FileKind.TEXT -> ".txt"; FileKind.PAINT -> ".png"; FileKind.FOLDER -> "" }
+    val extension = when (kind) { FileKind.TEXT -> ".txt"; FileKind.PAINT -> if (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true)) name.takeLast(4) else ".png"; FileKind.FOLDER -> "" }
     return if (name.endsWith(extension, ignoreCase = true)) name.dropLast(extension.length) else name
 }
 
