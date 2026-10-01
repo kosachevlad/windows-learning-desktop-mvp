@@ -6,6 +6,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.graphics.BitmapFactory
+import java.io.ByteArrayOutputStream
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
@@ -87,7 +88,9 @@ fun WindowsLearningDesktopApp(
         if (pictures != null && repository.children(pictures.id).none { it.name.endsWith(".jpg", true) }) {
             val photos = listOf("Україна.jpg" to "image1.png", "Україна єдина.jpg" to "image2.png", "Квіти.jpg" to "image5.png", "Друзі.jpg" to "image7.png")
             photos.forEach { (name, asset) ->
-                val bytes = context.assets.open("browser/images/$asset").use { it.readBytes() }
+                val source = context.assets.open("browser/images/$asset").use { it.readBytes() }
+                val bitmap = BitmapFactory.decodeByteArray(source, 0, source.size)
+                val bytes = ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
                 repository.createPaint(name, pictures.id, bytes)
             }
         }
