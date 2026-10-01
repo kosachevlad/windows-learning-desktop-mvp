@@ -225,6 +225,7 @@ fun WindowsLearningDesktopApp(
             "wiki.local" -> "wiki.html"
             "weather.local" -> "weather.html"
             "search.local" -> "search.html"
+            "gallery.local" -> "gallery.html"
             else -> null
         }
         if (page == null) webView?.loadDataWithBaseURL(null, "<html><body style='font-family:sans-serif;padding:32px'><h1>Сторінку не знайдено</h1><p>Адреса <b>$host</b> не існує в офлайн-браузері.</p></body></html>", "text/html", "UTF-8", null)
@@ -241,6 +242,16 @@ fun WindowsLearningDesktopApp(
             OutlinedTextField(address, { address = it }, Modifier.weight(1f), singleLine = true,
                 label = { Text("Адрес") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { loadAddress(address) }))
+            var browserMenu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { browserMenu = !browserMenu }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
+                DropdownMenu(expanded = browserMenu, onDismissRequest = { browserMenu = false }) {
+                    DropdownMenuItem(text = { Text("Нова вкладка") }, onClick = { browserMenu = false })
+                    DropdownMenuItem(text = { Text("Історія") }, onClick = { browserMenu = false })
+                    DropdownMenuItem(text = { Text("Завантаження") }, onClick = { browserMenu = false })
+                    DropdownMenuItem(text = { Text("Налаштування") }, onClick = { browserMenu = false })
+                }
+            }
         }
         AndroidView(
             modifier = Modifier.weight(1f).fillMaxWidth(),
