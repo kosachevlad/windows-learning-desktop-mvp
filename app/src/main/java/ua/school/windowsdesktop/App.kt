@@ -58,6 +58,7 @@ private sealed interface AppScreen {
     data object Desktop : AppScreen
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
     data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
+    data object WordHome : AppScreen
     data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object SystemInfo : AppScreen
@@ -137,6 +138,11 @@ fun WindowsLearningDesktopApp(
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
                         onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions)
+                    AppScreen.WordHome -> WordHomeScreen(
+                        nodes = snapshot.nodes.values.toList(),
+                        onNew = { screen = AppScreen.Word() },
+                        onOpen = { screen = AppScreen.Word(it) },
+                    )
                     is AppScreen.Word -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
@@ -163,7 +169,7 @@ fun WindowsLearningDesktopApp(
                 onPaint = { screen = AppScreen.Paint() },
                 onBrowser = { screen = AppScreen.Browser },
                 onMusic = { screen = AppScreen.Music(snapshot.nodes.values.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "") },
-                onWord = { screen = AppScreen.Word() },
+                onWord = { screen = AppScreen.WordHome },
             )
         }
         }
@@ -686,6 +692,41 @@ fun WindowsLearningDesktopApp(
         } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.empty_recycle_bin)) } },
         dismissButton = { TextButton(onClick = { confirmEmpty = false }) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+@Composable private fun WordHomeScreen(nodes: List<FileNode>, onNew: () -> Unit, onOpen: (String) -> Unit) {
+    val documents = nodes.filter { it.kind == FileKind.TEXT && it.trashedAt == null }.sortedByDescending { it.modifiedAt }
+    Row(Modifier.fillMaxSize().background(Color.White)) {
+        Column(Modifier.width(175.dp).fillMaxHeight().background(Color(0xFF2F5597))) {
+            Text("Word", color = Color.White, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(28.dp, 30.dp))
+            Text("⌂\nОсновне", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp).background(Color(0xFF1F3864)).padding(16.dp))
+            Text("□\nСтворити", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
+            Text("▱\nВідкрити", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
+            Spacer(Modifier.weight(1f))
+            Text("Параметри", color = Color.White, modifier = Modifier.padding(24.dp))
+        }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(34.dp)) {
+            Text("Доброго дня!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            Text("Створити", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 30.dp, bottom = 16.dp))
+            Card(onClick = onNew, modifier = Modifier.size(225.dp, 180.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE0E0E0))) {
+                Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Box(Modifier.size(72.dp, 92.dp).background(Color.White))
+                    Text("Новий документ", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+                }
+            }
+            Text("Останні", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 36.dp, bottom = 10.dp))
+            documents.take(8).forEach { document ->
+                Row(Modifier.fillMaxWidth().clickable { onOpen(document.id) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(painterResource(R.drawable.start_word), "Word", Modifier.size(34.dp))
+                    Column(Modifier.padding(start = 14.dp)) {
+                        Text(displayFileName(document.name, FileKind.TEXT, false), style = MaterialTheme.typography.bodyLarge)
+                        Text("Документи", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                HorizontalDivider()
+            }
+        }
+    }
 }
 
 @Composable private fun MusicScreen(repository: LearningFileRepository, file: FileNode?, onClose: () -> Unit) {
