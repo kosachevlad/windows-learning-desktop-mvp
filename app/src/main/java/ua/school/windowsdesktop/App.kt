@@ -7,6 +7,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
+import android.widget.EditText
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
+import android.graphics.Typeface
 import java.io.File
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,6 +43,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -705,6 +711,7 @@ fun WindowsLearningDesktopApp(
     var italic by remember { mutableStateOf(false) }
     var underline by remember { mutableStateOf(false) }
     var alignment by remember { mutableStateOf(TextAlign.Left) }
+    var activeEditor by remember { mutableStateOf<EditText?>(null) }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     fun save() { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text }.onFailure { onError(errorMessage(it)) } } }
     BackHandler(onBack = onClose)
@@ -716,9 +723,9 @@ fun WindowsLearningDesktopApp(
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = ::save) { Text("Зберегти") }
-            TextButton(onClick = { bold = !bold }) { Text("Ж", fontWeight = FontWeight.Bold) }
-            TextButton(onClick = { italic = !italic }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
-            TextButton(onClick = { underline = !underline }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
+            TextButton(onClick = { bold = !bold; activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.BOLD)) } }) { Text("Ж", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { italic = !italic; activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.ITALIC)) } }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
+            TextButton(onClick = { underline = !underline; activeEditor?.let { applySpanToSelection(it, UnderlineSpan()) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
             DropdownMenuBox(font, listOf("Times New Roman", "Courier New", "Calibri")) { font = it }
             DropdownMenuBox(size, listOf("10", "11", "12", "14", "16", "18", "24")) { size = it }
             TextButton(onClick = { alignment = TextAlign.Left }) { Text("≡") }
@@ -732,8 +739,8 @@ fun WindowsLearningDesktopApp(
                 Text("1–$pageCount", color = Color.Gray, modifier = Modifier.padding(4.dp))
                 pageChunks.forEachIndexed { pageIndex, pageLines ->
                     val pageText = pageLines.joinToString("\n")
-                    Surface(Modifier.width(794.dp).height(1123.dp), color = Color.White, shadowElevation = 2.dp) {
-                        if (loaded) OutlinedTextField(
+                    Surface(Modifier.width(794.dp).height(1123.dp), color = Color.White, shadowElevation = 2.dp, border = BorderStroke(1.dp, Color(0xFFD8D8D8))) {
+                        if (loaded) RichTextEditor(
                             value = pageText,
                             onValueChange = { updated ->
                                 val allLines = pageChunks.flatMap { it }.toMutableList()
@@ -743,9 +750,7 @@ fun WindowsLearningDesktopApp(
                                 text = allLines.joinToString("\n")
                             },
                             modifier = Modifier.fillMaxSize().padding(66.dp, 70.dp),
-                            maxLines = 35,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = size.toInt().sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal, textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else androidx.compose.ui.text.style.TextDecoration.None, textAlign = alignment),
-                            placeholder = { if (pageIndex == 0) Text("Почніть вводити текст") }
+                            onEditorReady = { activeEditor = it }
                         )
                     }
                     if (pageIndex < pageChunks.lastIndex) Spacer(Modifier.height(12.dp))
