@@ -40,7 +40,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
@@ -143,11 +145,9 @@ fun WindowsLearningDesktopApp(
                         onNew = { screen = AppScreen.Word() },
                         onOpen = { screen = AppScreen.Word(it) },
                     )
-                    is AppScreen.Word -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
-                        onError = { error = it }, keyboardLanguage = keyboardLanguage,
-                        onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions,
-                        applicationName = "Word")
+                    is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
+                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.WordHome },
+                        onError = { error = it }, showFileExtensions = showFileExtensions)
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
@@ -694,12 +694,61 @@ fun WindowsLearningDesktopApp(
     )
 }
 
+@Composable private fun WordEditorScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onClose: () -> Unit, onError: (String) -> Unit, showFileExtensions: Boolean) {
+    val scope = rememberCoroutineScope()
+    var text by remember(file?.id) { mutableStateOf("") }
+    var loaded by remember(file?.id) { mutableStateOf(file == null) }
+    var saved by remember(file?.id) { mutableStateOf("") }
+    var font by remember { mutableStateOf("Calibri") }
+    var size by remember { mutableStateOf("11") }
+    var bold by remember { mutableStateOf(false) }
+    var italic by remember { mutableStateOf(false) }
+    var underline by remember { mutableStateOf(false) }
+    var alignment by remember { mutableStateOf(TextAlign.Left) }
+    LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
+    fun save() { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text }.onFailure { onError(errorMessage(it)) } } }
+    BackHandler(onBack = onClose)
+    Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
+        Row(Modifier.fillMaxWidth().background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEachIndexed { index, tab ->
+                Text(tab, color = Color.White, modifier = Modifier.background(if (index == 1) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (index == 1) Color(0xFF234A87) else Color.White))
+            }
+        }
+        Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = ::save) { Text("Зберегти") }
+            TextButton(onClick = { bold = !bold }) { Text("Ж", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { italic = !italic }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
+            TextButton(onClick = { underline = !underline }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
+            DropdownMenuBox(font, listOf("Times New Roman", "Courier New", "Calibri")) { font = it }
+            DropdownMenuBox(size, listOf("10", "11", "12", "14", "16", "18", "24")) { size = it }
+            TextButton(onClick = { alignment = TextAlign.Left }) { Text("≡") }
+            TextButton(onClick = { alignment = TextAlign.Center }) { Text("☰") }
+            TextButton(onClick = { alignment = TextAlign.Right }) { Text("≡") }
+        }
+        Box(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("1", color = Color.Gray, modifier = Modifier.padding(4.dp))
+                Surface(Modifier.width(794.dp).height(1123.dp).padding(12.dp), color = Color.White, shadowElevation = 2.dp) {
+                    if (loaded) OutlinedTextField(text, { text = it }, Modifier.fillMaxSize().padding(66.dp, 70.dp), textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = size.toInt().sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal, textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else androidx.compose.ui.text.style.TextDecoration.None, textAlign = alignment), placeholder = { Text("Почніть вводити текст") })
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Сторінка 1 з 1", Modifier.weight(1f)); Text("Слів: ${text.trim().split(Regex("\\s+")).count { it.isNotBlank() }}"); Text("− 100% +", Modifier.padding(start = 24.dp))
+        }
+    }
+}
+
+@Composable private fun DropdownMenuBox(value: String, options: List<String>, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box { TextButton(onClick = { expanded = true }) { Text(value) }; DropdownMenu(expanded, { expanded = false }) { options.forEach { option -> DropdownMenuItem({ Text(option) }, { onSelect(option); expanded = false }) } } }
+}
+
 @Composable private fun WordHomeScreen(nodes: List<FileNode>, onNew: () -> Unit, onOpen: (String) -> Unit) {
     val documents = nodes.filter { it.kind == FileKind.TEXT && it.trashedAt == null }.sortedByDescending { it.modifiedAt }
     Row(Modifier.fillMaxSize().background(Color.White)) {
         Column(Modifier.width(175.dp).fillMaxHeight().background(Color(0xFF2F5597))) {
             Text("Word", color = Color.White, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(28.dp, 30.dp))
-            Text("⌂\nОсновне", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp).background(Color(0xFF1F3864)).padding(16.dp))
             Text("□\nСтворити", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
             Text("▱\nВідкрити", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
             Spacer(Modifier.weight(1f))
@@ -951,8 +1000,9 @@ internal fun Modifier.dialogKeys(
     }
 }
 
-private fun errorMessage(failure: Exception): String = when ((failure as? FileOperationException)?.code) {
+private fun errorMessage(failure: Throwable): String = when ((failure as? FileOperationException)?.code) {
     FileError.NAME_CONFLICT -> "Об’єкт із таким ім’ям уже існує."
     FileError.INVALID_NAME, FileError.INVALID_EXTENSION -> "Це ім’я не можна використати."
     else -> failure.message ?: "Невідома помилка"
 }
+

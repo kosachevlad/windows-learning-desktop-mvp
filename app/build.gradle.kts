@@ -61,6 +61,28 @@ android {
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
+// Every debug build is also archived as the next numbered stage APK.
+// For example, stage55.apk becomes stage56.apk on the next build.
+val copyNextStageApk = tasks.register("copyNextStageApk") {
+    doLast {
+        val apkDirectory = project.file("$projectDir/apk")
+        apkDirectory.mkdirs()
+        val stagePattern = Regex("stage(\\d+)\\.apk")
+        val nextStage = apkDirectory.listFiles()
+            ?.mapNotNull { stagePattern.matchEntire(it.name)?.groupValues?.get(1)?.toIntOrNull() }
+            ?.maxOrNull()?.plus(1) ?: 1
+        val builtApk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
+        if (!builtApk.isFile) error("Debug APK was not found: ${builtApk.absolutePath}")
+        val destination = apkDirectory.resolve("stage$nextStage.apk")
+        builtApk.copyTo(destination, overwrite = true)
+        logger.lifecycle("Archived APK: ${destination.absolutePath}")
+    }
+}
+
+afterEvaluate {
+    tasks.named("assembleDebug") { finalizedBy(copyNextStageApk) }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.room.runtime)
