@@ -161,7 +161,21 @@ fun WindowsLearningDesktopApp(
                     AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
                         onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
                         showFileExtensions = showFileExtensions)
-                    AppScreen.Browser -> BrowserScreen(onClose = { screen = AppScreen.Desktop })
+                    AppScreen.Browser -> {
+                        val downloadsFolder = snapshot.nodes.values.firstOrNull {
+                            it.parentId == FileOperations.ROOT_ID && it.kind == FileKind.FOLDER && it.name == "Завантаження"
+                        }
+                        BrowserScreen(
+                            repository = repository,
+                            downloadsFolderId = downloadsFolder?.id,
+                            downloads = downloadsFolder?.let { folder ->
+                                snapshot.nodes.values.filter { it.parentId == folder.id && it.trashedAt == null }
+                                    .sortedByDescending { it.modifiedAt }
+                            }.orEmpty(),
+                            onOpenDownloads = { downloadsFolder?.let { screen = AppScreen.Explorer(it.id) } },
+                            onClose = { screen = AppScreen.Desktop },
+                        )
+                    }
                     is AppScreen.Photo -> PhotoScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Explorer(FileOperations.ROOT_ID) })
                     is AppScreen.Music -> MusicScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Desktop })
                 }
@@ -275,9 +289,18 @@ fun WindowsLearningDesktopApp(
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-@Composable private fun BrowserScreen(onClose: () -> Unit) {
+@Composable private fun BrowserScreen(
+    repository: LearningFileRepository,
+    downloadsFolderId: String?,
+    downloads: List<FileNode>,
+    onOpenDownloads: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var address by remember { mutableStateOf("home.local") }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
     fun loadAddress(value: String) {
         val host = value.trim().lowercase().removePrefix("https://").removePrefix("http://").trimEnd('/')
         address = host
@@ -293,6 +316,20 @@ fun WindowsLearningDesktopApp(
         if (page == null) webView?.loadDataWithBaseURL(null, "<html><body style='font-family:sans-serif;padding:32px'><h1>Сторінку не знайдено</h1><p>Адреса <b>$host</b> не існує в офлайн-браузері.</p></body></html>", "text/html", "UTF-8", null)
         else webView?.loadUrl("file:///android_asset/browser/$page")
     }
+    fun downloadImage(assetName: String) {
+        val folderId = downloadsFolderId ?: run {
+            downloadError = "Папка «Завантаження» ще готується"
+            return
+        }
+        val fileName = browserDownloadName(assetName) ?: return
+        scope.launch {
+            runCatching {
+                val bytes = context.assets.open("browser/images/$assetName").use { it.readBytes() }
+                val name = nextBrowserDownloadName(fileName, repository.children(folderId))
+                repository.createPaint(name, folderId, bytes)
+            }.onFailure { downloadError = "Не вдалося завантажити зображення" }
+        }
+    }
     BackHandler(enabled = webView?.canGoBack() == true) { webView?.goBack() }
     Column(Modifier.fillMaxSize().background(Color.White)) {
         WindowTitle("Браузер", onClose)
@@ -304,17 +341,35 @@ fun WindowsLearningDesktopApp(
             OutlinedTextField(address, { address = it }, Modifier.weight(1f), singleLine = true,
                 label = { Text("Адрес") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { loadAddress(address) }))
+            var downloadsMenu by remember { mutableStateOf(false) }
+            if (downloads.isNotEmpty()) {
+                Box {
+                    IconButton(
+                        onClick = { downloadsMenu = !downloadsMenu },
+                        modifier = Modifier.semantics { contentDescription = "Завантаження" },
+                    ) { Text("⇩", style = MaterialTheme.typography.titleLarge) }
+                    DropdownMenu(expanded = downloadsMenu, onDismissRequest = { downloadsMenu = false }) {
+                        downloads.forEach { download ->
+                            DropdownMenuItem(text = { Text(download.name) }, onClick = {
+                                downloadsMenu = false
+                                onOpenDownloads()
+                            })
+                        }
+                    }
+                }
+            }
             var browserMenu by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { browserMenu = !browserMenu }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
                 DropdownMenu(expanded = browserMenu, onDismissRequest = { browserMenu = false }) {
                     DropdownMenuItem(text = { Text("Нова вкладка") }, onClick = { browserMenu = false })
                     DropdownMenuItem(text = { Text("Історія") }, onClick = { browserMenu = false })
-                    DropdownMenuItem(text = { Text("Завантаження") }, onClick = { browserMenu = false })
+                    DropdownMenuItem(text = { Text("Завантаження") }, onClick = { browserMenu = false; onOpenDownloads() })
                     DropdownMenuItem(text = { Text("Налаштування") }, onClick = { browserMenu = false })
                 }
             }
         }
+        downloadError?.let { Text(it, color = Color(0xFFB00020), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) }
         AndroidView(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             factory = { context -> WebView(context).apply {
@@ -322,9 +377,18 @@ fun WindowsLearningDesktopApp(
                 settings.domStorageEnabled = false
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                        val target = request.url.toString().removePrefix("browser://")
-                        loadAddress(target)
-                        return true
+                        val target = request.url.toString()
+                        return when {
+                            target.startsWith("download://") -> {
+                                downloadImage(target.removePrefix("download://"))
+                                true
+                            }
+                            target.startsWith("browser://") -> {
+                                loadAddress(target.removePrefix("browser://"))
+                                true
+                            }
+                            else -> true
+                        }
                     }
                 }
                 webView = this
@@ -333,6 +397,33 @@ fun WindowsLearningDesktopApp(
             update = { webView = it },
         )
     }
+}
+
+private fun browserDownloadName(assetName: String): String? = when (assetName) {
+    "image1.png" -> "Україна.png"
+    "image2.png" -> "Україна єдина.png"
+    "image3.png" -> "Все буде Україна.png"
+    "image4.png" -> "Слава Україні.png"
+    "image5.png" -> "Квіти.png"
+    "image6.png" -> "Мультфільм.png"
+    "image7.png" -> "Друзі.png"
+    "image8.png" -> "Ведмедики.png"
+    "image9.png" -> "Собака.png"
+    "image10.png" -> "Коргі.png"
+    else -> null
+}
+
+private fun nextBrowserDownloadName(original: String, existing: List<FileNode>): String {
+    val extensionStart = original.lastIndexOf('.').coerceAtLeast(0)
+    val stem = original.substring(0, extensionStart)
+    val extension = original.substring(extensionStart)
+    var number = 1
+    var candidate = original
+    while (existing.any { it.name.equals(candidate, ignoreCase = true) }) {
+        candidate = "$stem ($number)$extension"
+        number++
+    }
+    return candidate
 }
 
 @Composable private fun ExplorerScreen(
