@@ -725,16 +725,28 @@ fun WindowsLearningDesktopApp(
             TextButton(onClick = { alignment = TextAlign.Center }) { Text("☰") }
             TextButton(onClick = { alignment = TextAlign.Right }) { Text("≡") }
         }
+        val estimatedLines = text.split('\n').sumOf { (it.length / 70) + 1 }
+        val pageCount = maxOf(1, (estimatedLines + 44) / 45)
         Box(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
+            val documentHeight = (1123 * pageCount).dp
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("1", color = Color.Gray, modifier = Modifier.padding(4.dp))
-                Surface(Modifier.width(794.dp).height(1123.dp).padding(12.dp), color = Color.White, shadowElevation = 2.dp) {
-                    if (loaded) OutlinedTextField(text, { text = it }, Modifier.fillMaxSize().padding(66.dp, 70.dp), textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = size.toInt().sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal, textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else androidx.compose.ui.text.style.TextDecoration.None, textAlign = alignment), placeholder = { Text("Почніть вводити текст") })
+                Text("1–$pageCount", color = Color.Gray, modifier = Modifier.padding(4.dp))
+                Box(Modifier.width(794.dp).height(documentHeight)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        repeat(pageCount) { Surface(Modifier.width(794.dp).height(1123.dp), color = Color.White, shadowElevation = 2.dp) {} }
+                    }
+                    if (loaded) OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.fillMaxWidth().height(documentHeight).padding(66.dp, 70.dp),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = size.toInt().sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal, textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else androidx.compose.ui.text.style.TextDecoration.None, textAlign = alignment),
+                        placeholder = { Text("Почніть вводити текст") }
+                    )
                 }
             }
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Сторінка 1 з 1", Modifier.weight(1f)); Text("Слів: ${text.trim().split(Regex("\\s+")).count { it.isNotBlank() }}"); Text("− 100% +", Modifier.padding(start = 24.dp))
+            Text("Сторінка 1 з $pageCount", Modifier.weight(1f)); Text("Слів: ${text.trim().split(Regex("\\s+")).count { it.isNotBlank() }}"); Text("− 100% +", Modifier.padding(start = 24.dp))
         }
     }
 }
