@@ -813,6 +813,7 @@ fun WindowsLearningDesktopApp(
     var duration by remember(file?.id) { mutableIntStateOf(1) }
     var position by remember(file?.id) { mutableIntStateOf(0) }
     var playing by remember(file?.id) { mutableStateOf(false) }
+    var volume by remember(file?.id) { mutableFloatStateOf(1f) }
     var prepared by remember(file?.id) { mutableStateOf(false) }
     var playbackError by remember(file?.id) { mutableStateOf(false) }
     LaunchedEffect(file?.id) {
@@ -821,6 +822,7 @@ fun WindowsLearningDesktopApp(
             audioFile.writeBytes(repository.readPaint(file.id))
             player = MediaPlayer().apply {
                 setAudioAttributes(android.media.AudioAttributes.Builder().setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
+                setVolume(volume, volume)
                 setOnPreparedListener { media -> duration = media.duration.coerceAtLeast(1); prepared = true }
                 setOnCompletionListener { playing = false; position = 0 }
                 setOnErrorListener { _, _, _ -> playbackError = true; prepared = false; true }
@@ -841,15 +843,23 @@ fun WindowsLearningDesktopApp(
             Text(file?.name ?: "Музичний файл", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
             if (playbackError) Text("Не вдалося підготувати аудіо", color = Color(0xFFB00020))
             Slider(value = position.toFloat(), onValueChange = { value -> position = value.toInt(); player?.let { runCatching { it.seekTo(position) } } }, valueRange = 0f..duration.coerceAtLeast(1).toFloat())
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = {
-                    player?.let { media ->
-                        runCatching { if (!media.isPlaying) media.start() }.onSuccess { playing = true }
-                    }
-                }, enabled = prepared) { Text("▶ Play") }
-                Button(onClick = {
-                    player?.let { media -> runCatching { if (media.isPlaying) media.pause() }.onSuccess { playing = false } }
-                }, enabled = prepared) { Text("Ⅱ Pause") }
+            Text("Гучність: ${(volume * 100).roundToInt()}%", modifier = Modifier.align(Alignment.Start))
+            Slider(
+                value = volume,
+                onValueChange = { value ->
+                    volume = value
+                    player?.setVolume(value, value)
+                },
+                valueRange = 0f..1f,
+            )
+            Button(onClick = {
+                player?.let { media ->
+                    runCatching {
+                        if (media.isPlaying) media.pause() else media.start()
+                    }.onSuccess { playing = media.isPlaying }
+                }
+            }, enabled = prepared) {
+                Text(if (playing) "Ⅱ Pause" else "▶ Play")
             }
         }
     }
