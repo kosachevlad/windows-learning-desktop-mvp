@@ -58,6 +58,7 @@ private sealed interface AppScreen {
     data object Desktop : AppScreen
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
     data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
+    data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object SystemInfo : AppScreen
     data object Trash : AppScreen
@@ -136,6 +137,11 @@ fun WindowsLearningDesktopApp(
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
                         onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions)
+                    is AppScreen.Word -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
+                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
+                        onError = { error = it }, keyboardLanguage = keyboardLanguage,
+                        onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions,
+                        applicationName = "Word")
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
@@ -157,6 +163,7 @@ fun WindowsLearningDesktopApp(
                 onPaint = { screen = AppScreen.Paint() },
                 onBrowser = { screen = AppScreen.Browser },
                 onMusic = { screen = AppScreen.Music(snapshot.nodes.values.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "") },
+                onWord = { screen = AppScreen.Word() },
             )
         }
         }
@@ -175,6 +182,7 @@ fun WindowsLearningDesktopApp(
     onPaint: () -> Unit,
     onBrowser: () -> Unit,
     onMusic: () -> Unit,
+    onWord: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
     var startMenu by remember { mutableStateOf(false) }
@@ -213,7 +221,7 @@ fun WindowsLearningDesktopApp(
                     StartApp("Paint", R.drawable.paint) { startMenu = false; onPaint() },
                     StartApp("PowerPoint", R.drawable.start_powerpoint),
                     StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
-                    StartApp("Word", R.drawable.start_word),
+                    StartApp("Word", R.drawable.start_word) { startMenu = false; onWord() },
                     ).sortedBy { it.name.lowercase() }.forEach { app ->
                     DropdownMenuItem(
                         text = { Text(app.name) },
@@ -746,7 +754,7 @@ fun WindowsLearningDesktopApp(
     repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>,
     onClose: () -> Unit, onError: (String) -> Unit,
     keyboardLanguage: String, onKeyboardLanguage: (String) -> Unit,
-    showFileExtensions: Boolean,
+    showFileExtensions: Boolean, applicationName: String = "Блокнот",
 ) {
     val scope = rememberCoroutineScope()
     var currentFileId by remember(file?.id) { mutableStateOf(file?.id) }
@@ -783,7 +791,7 @@ fun WindowsLearningDesktopApp(
             else -> false
         }
     }) {
-        WindowTitle(displayFileName(currentName, FileKind.TEXT, showFileExtensions) + if (dirty) " *" else "", ::requestClose)
+        WindowTitle("$applicationName — ${displayFileName(currentName, FileKind.TEXT, showFileExtensions)}${if (dirty) " *" else ""}", ::requestClose)
         Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) {
             TextButton(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
             TextButton(onClick = ::requestSaveAs, enabled = loaded) { Text(stringResource(R.string.save_as)) }
