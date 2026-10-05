@@ -750,7 +750,12 @@ fun WindowsLearningDesktopApp(
                                 text = allLines.joinToString("\n")
                             },
                             modifier = Modifier.fillMaxSize().padding(66.dp, 70.dp),
-                            onEditorReady = { activeEditor = it }
+                            onEditorReady = { activeEditor = it },
+                            fontFamily = font,
+                            fontSize = size.toInt(),
+                            bold = bold,
+                            italic = italic,
+                            underline = underline,
                         )
                     }
                     if (pageIndex < pageChunks.lastIndex) Spacer(Modifier.height(12.dp))

@@ -6,6 +6,7 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.widget.EditText
+import android.graphics.Typeface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -17,6 +18,11 @@ fun RichTextEditor(
     modifier: Modifier = Modifier,
     onValueChange: (String) -> Unit,
     onEditorReady: (EditText) -> Unit = {},
+    fontFamily: String = "Calibri",
+    fontSize: Int = 11,
+    bold: Boolean = false,
+    italic: Boolean = false,
+    underline: Boolean = false,
 ) {
     AndroidView(
         modifier = modifier,
@@ -40,6 +46,9 @@ fun RichTextEditor(
                 editor.setText(value)
                 editor.setSelection(selection)
             }
+            editor.typeface = Typeface.create(when (fontFamily) { "Times New Roman" -> Typeface.SERIF; "Courier New" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, when { bold && italic -> Typeface.BOLD_ITALIC; bold -> Typeface.BOLD; italic -> Typeface.ITALIC; else -> Typeface.NORMAL })
+            editor.textSize = fontSize.toFloat()
+            editor.paint.isUnderlineText = underline
             onEditorReady(editor)
         },
     )
