@@ -304,13 +304,15 @@ fun WindowsLearningDesktopApp(
     fun loadAddress(value: String) {
         val host = value.trim().lowercase().removePrefix("https://").removePrefix("http://").trimEnd('/')
         address = host
-        val page = when (host) {
+        val site = host.substringBefore('/')
+        val page = when (site) {
             "home.local", "" -> "home.html"
             "school.local" -> "school.html"
             "wiki.local" -> "wiki.html"
             "weather.local" -> "weather.html"
             "search.local" -> "search.html"
             "gallery.local" -> "gallery.html"
+            "tales.local" -> "tales.html"
             else -> null
         }
         if (page == null) webView?.loadDataWithBaseURL(null, "<html><body style='font-family:sans-serif;padding:32px'><h1>Сторінку не знайдено</h1><p>Адреса <b>$host</b> не існує в офлайн-браузері.</p></body></html>", "text/html", "UTF-8", null)
@@ -328,6 +330,16 @@ fun WindowsLearningDesktopApp(
                 val name = nextBrowserDownloadName(fileName, repository.children(folderId))
                 repository.createPaint(name, folderId, bytes)
             }.onFailure { downloadError = "Не вдалося завантажити зображення" }
+        }
+    }
+    fun downloadTale(assetName: String) {
+        val folderId = downloadsFolderId ?: run { downloadError = "Папка «Завантаження» ще готується"; return }
+        scope.launch {
+            runCatching {
+                val bytes = context.assets.open("browser/$assetName").use { it.readBytes() }
+                val name = nextBrowserDownloadName(assetName, repository.children(folderId))
+                repository.createText(name, folderId, bytes.toString(Charsets.UTF_8))
+            }.onFailure { downloadError = "Не вдалося завантажити казку" }
         }
     }
     BackHandler(enabled = webView?.canGoBack() == true) { webView?.goBack() }
@@ -380,7 +392,8 @@ fun WindowsLearningDesktopApp(
                         val target = request.url.toString()
                         return when {
                             target.startsWith("download://") -> {
-                                downloadImage(target.removePrefix("download://"))
+                                val asset = target.removePrefix("download://")
+                                if (asset.endsWith(".txt")) downloadTale(asset) else downloadImage(asset)
                                 true
                             }
                             target.startsWith("browser://") -> {
