@@ -725,26 +725,30 @@ fun WindowsLearningDesktopApp(
             TextButton(onClick = { alignment = TextAlign.Center }) { Text("☰") }
             TextButton(onClick = { alignment = TextAlign.Right }) { Text("≡") }
         }
-        // Keep enough room for wrapped lines and the page margins so the text field
-        // never needs its own vertical scrolling area.
-        val estimatedLines = text.split('\n').sumOf { (it.length / 45) + 1 }
-        val pageCount = maxOf(1, (estimatedLines + 34) / 35)
+        val pageChunks = text.split('\n').chunked(35).ifEmpty { listOf(listOf("")) }
+        val pageCount = pageChunks.size
         Box(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
-            val documentHeight = (1123 * pageCount).dp
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("1–$pageCount", color = Color.Gray, modifier = Modifier.padding(4.dp))
-                Box(Modifier.width(794.dp).height(documentHeight)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        repeat(pageCount) { Surface(Modifier.width(794.dp).height(1123.dp), color = Color.White, shadowElevation = 2.dp) {} }
+                pageChunks.forEachIndexed { pageIndex, pageLines ->
+                    val pageText = pageLines.joinToString("\n")
+                    Surface(Modifier.width(794.dp).height(1123.dp), color = Color.White, shadowElevation = 2.dp) {
+                        if (loaded) OutlinedTextField(
+                            value = pageText,
+                            onValueChange = { updated ->
+                                val allLines = pageChunks.flatMap { it }.toMutableList()
+                                val start = pageIndex * 35
+                                repeat(pageLines.size) { if (start < allLines.size) allLines.removeAt(start) }
+                                allLines.addAll(start, updated.split('\n'))
+                                text = allLines.joinToString("\n")
+                            },
+                            modifier = Modifier.fillMaxSize().padding(66.dp, 70.dp),
+                            maxLines = 35,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = size.toInt().sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal, textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else androidx.compose.ui.text.style.TextDecoration.None, textAlign = alignment),
+                            placeholder = { if (pageIndex == 0) Text("Почніть вводити текст") }
+                        )
                     }
-                    if (loaded) OutlinedTextField(
-                        value = text,
-                        onValueChange = { text = it },
-                        modifier = Modifier.fillMaxWidth().height(documentHeight).padding(66.dp, 70.dp),
-                        maxLines = pageCount * 35,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = size.toInt().sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal, textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else androidx.compose.ui.text.style.TextDecoration.None, textAlign = alignment),
-                        placeholder = { Text("Почніть вводити текст") }
-                    )
+                    if (pageIndex < pageChunks.lastIndex) Spacer(Modifier.height(12.dp))
                 }
             }
         }
