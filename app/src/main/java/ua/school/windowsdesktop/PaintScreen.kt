@@ -53,7 +53,8 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
 
-internal enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, CURVE, RECTANGLE, OVAL, TEXT }
+internal enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, CURVE, RECTANGLE, OVAL, SHAPE, TEXT }
+internal enum class PaintShape { TRIANGLE, RIGHT_TRIANGLE, STAR4, STAR5, STAR6, DIAMOND, PENTAGON, ROUNDED_RECT, HEART, ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT }
 internal data class PaintAction(
     val tool: PaintTool,
     val points: List<Offset>,
@@ -63,6 +64,7 @@ internal data class PaintAction(
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
     val editBounds: androidx.compose.ui.geometry.Rect? = null,
+    val shape: PaintShape? = null,
 )
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -97,6 +99,8 @@ fun PaintScreen(
     var enteredText by remember { mutableStateOf("") }
     var activeCurve by remember { mutableStateOf<PaintAction?>(null) }
     var curveStage by remember { mutableIntStateOf(0) }
+    var shape by remember { mutableStateOf(PaintShape.TRIANGLE) }
+    var shapeMenu by remember { mutableStateOf(false) }
     var fileMenu by remember { mutableStateOf(false) }
     var editMenu by remember { mutableStateOf(false) }
     var viewMenu by remember { mutableStateOf(false) }
@@ -191,6 +195,12 @@ fun PaintScreen(
                     ToolButton(R.drawable.paint_curve, "Крива", tool == PaintTool.CURVE) { selectedActionIndex = null; commitCurve(); tool = PaintTool.CURVE }
                     ToolButton(R.drawable.paint_rectangle, stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { selectedActionIndex = null; tool = PaintTool.RECTANGLE }
                     ToolButton(R.drawable.paint_oval, stringResource(R.string.oval), tool == PaintTool.OVAL) { selectedActionIndex = null; tool = PaintTool.OVAL }
+                    Box {
+                        TextButton(onClick = { shapeMenu = true }) { Text("Фігури ▾") }
+                        DropdownMenu(shapeMenu, { shapeMenu = false }) {
+                            PaintShape.values().forEach { option -> DropdownMenuItem(text = { Text(shapeLabel(option)) }, leadingIcon = { Icon(painterResource(shapeIcon(option)), null, tint = Color.Unspecified) }, onClick = { shape = option; tool = PaintTool.SHAPE; selectedActionIndex = null; shapeMenu = false }) }
+                        }
+                    }
                     ToolButton(R.drawable.paint_text, stringResource(R.string.text_tool), tool == PaintTool.TEXT) { selectedActionIndex = null; tool = PaintTool.TEXT }
                 }
                 if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -283,8 +293,8 @@ fun PaintScreen(
                         }
                         val color = if (gestureTool == PaintTool.ERASER) AndroidColor.WHITE else selectedColor
                         val width = when (gestureTool) { PaintTool.ERASER -> selectedWidth * 4; PaintTool.BRUSH -> selectedWidth * 2; else -> selectedWidth }
-                        val isShape = gestureTool in listOf(PaintTool.LINE, PaintTool.RECTANGLE, PaintTool.OVAL)
-                        var drawing = PaintAction(gestureTool, listOf(down.position, down.position), color, width)
+                        val isShape = gestureTool in listOf(PaintTool.LINE, PaintTool.RECTANGLE, PaintTool.OVAL, PaintTool.SHAPE)
+                        var drawing = PaintAction(gestureTool, listOf(down.position, down.position), color, width, shape = if (gestureTool == PaintTool.SHAPE) shape else null)
                         actions = before + drawing
                         var completed = false
                         try {
@@ -292,7 +302,7 @@ fun PaintScreen(
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                 val end = when {
-                                    shiftPressed && gestureTool in listOf(PaintTool.RECTANGLE, PaintTool.OVAL) -> constrainedSquareEnd(down.position, change.position)
+                                    shiftPressed && gestureTool in listOf(PaintTool.RECTANGLE, PaintTool.OVAL, PaintTool.SHAPE) -> constrainedSquareEnd(down.position, change.position)
                                     shiftPressed && gestureTool == PaintTool.LINE -> constrainedLineEnd(down.position, change.position)
                                     else -> change.position
                                 }
@@ -401,6 +411,7 @@ private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction
             }
             PaintTool.RECTANGLE -> canvas.drawRect(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
             PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
+            PaintTool.SHAPE -> action.shape?.let { canvas.drawPath(shapePath(it, start, end), paint) }
             PaintTool.TEXT -> {
                 paint.style = Paint.Style.FILL; paint.textSize = (action.width * 5).coerceAtLeast(18f)
                 canvas.save()
@@ -412,6 +423,36 @@ private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction
         }
     }
     return bitmap
+}
+
+private fun shapeLabel(shape: PaintShape): String = shape.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+private fun shapeIcon(shape: PaintShape): Int = when (shape) {
+    PaintShape.TRIANGLE -> R.drawable.paint_triangle; PaintShape.RIGHT_TRIANGLE -> R.drawable.paint_right_triangle
+    PaintShape.STAR4 -> R.drawable.paint_star4; PaintShape.STAR5 -> R.drawable.paint_star5; PaintShape.STAR6 -> R.drawable.paint_star6
+    PaintShape.DIAMOND -> R.drawable.paint_diamond; PaintShape.PENTAGON -> R.drawable.paint_pentagon
+    PaintShape.ROUNDED_RECT -> R.drawable.paint_rounded_rect; PaintShape.HEART -> R.drawable.paint_heart
+    PaintShape.ARROW_UP -> R.drawable.paint_arrow_up; PaintShape.ARROW_DOWN -> R.drawable.paint_arrow_down
+    PaintShape.ARROW_LEFT -> R.drawable.paint_arrow_left; PaintShape.ARROW_RIGHT -> R.drawable.paint_arrow_right
+}
+
+private fun shapePath(shape: PaintShape, start: Offset, end: Offset): Path {
+    val l = minOf(start.x, end.x); val r = maxOf(start.x, end.x); val t = minOf(start.y, end.y); val b = maxOf(start.y, end.y); val cx = (l + r) / 2f; val cy = (t + b) / 2f
+    val path = Path()
+    fun polygon(points: List<Pair<Float, Float>>) { path.moveTo(points[0].first, points[0].second); points.drop(1).forEach { path.lineTo(it.first, it.second) }; path.close() }
+    when (shape) {
+        PaintShape.TRIANGLE -> polygon(listOf(cx to t, r to b, l to b))
+        PaintShape.RIGHT_TRIANGLE -> polygon(listOf(l to t, l to b, r to b))
+        PaintShape.DIAMOND -> polygon(listOf(cx to t, r to cy, cx to b, l to cy))
+        PaintShape.PENTAGON -> polygon((0 until 5).map { i -> val a = -Math.PI / 2 + i * 2 * Math.PI / 5; cx + (r-l)/2 * kotlin.math.cos(a).toFloat() to cy + (b-t)/2 * kotlin.math.sin(a).toFloat() })
+        PaintShape.STAR4, PaintShape.STAR5, PaintShape.STAR6 -> { val n = when (shape) { PaintShape.STAR4 -> 4; PaintShape.STAR5 -> 5; else -> 6 }; polygon((0 until n * 2).map { i -> val a = -Math.PI / 2 + i * Math.PI / n; val rad = if (i % 2 == 0) 1f else .42f; cx + (r-l)/2 * rad * kotlin.math.cos(a).toFloat() to cy + (b-t)/2 * rad * kotlin.math.sin(a).toFloat() }) }
+        PaintShape.ROUNDED_RECT -> path.addRoundRect(RectF(l, t, r, b), 18f, 18f, Path.Direction.CW)
+        PaintShape.HEART -> { path.moveTo(cx, b); path.cubicTo(l, cy, l, t, cx, cy); path.cubicTo(r, t, r, cy, cx, b); path.close() }
+        PaintShape.ARROW_UP -> polygon(listOf(cx to t, r to cy, cx + (r-l)*.18f to cy, cx + (r-l)*.18f to b, cx - (r-l)*.18f to b, cx - (r-l)*.18f to cy, l to cy))
+        PaintShape.ARROW_DOWN -> polygon(listOf(l to cy, cx - (r-l)*.18f to cy, cx - (r-l)*.18f to t, cx + (r-l)*.18f to t, cx + (r-l)*.18f to cy, r to cy, cx to b))
+        PaintShape.ARROW_RIGHT -> polygon(listOf(cx to t, r to cy, cx to b, cx to cy + (b-t)*.18f, l to cy + (b-t)*.18f, l to cy - (b-t)*.18f, cx to cy - (b-t)*.18f))
+        PaintShape.ARROW_LEFT -> polygon(listOf(l to cy, cx to t, cx to cy - (b-t)*.18f, r to cy - (b-t)*.18f, r to cy + (b-t)*.18f, cx to cy + (b-t)*.18f, cx to b))
+    }
+    return path
 }
 
 private fun floodFill(bitmap: Bitmap, startX: Int, startY: Int, replacement: Int) {
@@ -569,3 +610,4 @@ private fun nextDrawingName(nodes: Collection<FileNode>): String {
         number++
     }
 }
+
