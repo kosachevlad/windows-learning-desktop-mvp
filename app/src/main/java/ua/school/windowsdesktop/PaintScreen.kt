@@ -142,7 +142,7 @@ fun PaintScreen(
     fun undo() { selectedActionIndex = null; if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }
     fun redo() { selectedActionIndex = null; if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }
     fun clear() { selectedActionIndex = null; baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }
-    fun commitCurve() { activeCurve?.let { if (it.points.size == 4) { actions = actions + it; redoActions = emptyList(); dirty = true } }; activeCurve = null; curveStage = 0 }
+    fun commitCurve() { activeCurve?.let { if (it.points.size == 4) { actions = actions + it; selectedActionIndex = actions.lastIndex; redoActions = emptyList(); dirty = true } }; activeCurve = null; curveStage = 0 }
 
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).focusRequester(paintFocusRequester).focusTarget().onPreviewKeyEvent { event ->
@@ -176,7 +176,7 @@ fun PaintScreen(
         }
         Row(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxHeight().width(52.dp).background(Color(0xFFE7E7E7)).verticalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                listOf(Color.Black, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFFFFC107), Color(0xFF7B1FA2), Color(0xFFFF7A00), Color(0xFFFF69B4), Color(0xFF795548), Color(0xFF81D4FA)).forEach { color ->
+                listOf(Color.Black, Color.White, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFFFFC107), Color(0xFF7B1FA2), Color(0xFFFF7A00), Color(0xFFFF69B4), Color(0xFF795548), Color(0xFF81D4FA)).forEach { color ->
                     Box(Modifier.padding(3.dp).size(32.dp).background(color).border(if (selectedColor == color.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = color.toArgb() })
                 }
                 Box(Modifier.padding(3.dp).size(32.dp).background(Color.Gray).border(if (selectedColor == Color.Gray.toArgb()) 3.dp else 1.dp, Color.DarkGray).clickable { selectedColor = Color.Gray.toArgb() })
@@ -188,7 +188,7 @@ fun PaintScreen(
                     ToolButton(R.drawable.paint_eraser, stringResource(R.string.eraser), tool == PaintTool.ERASER) { selectedActionIndex = null; tool = PaintTool.ERASER }
                     ToolButton(R.drawable.paint_fill, stringResource(R.string.fill), tool == PaintTool.FILL) { selectedActionIndex = null; tool = PaintTool.FILL }
                     ToolButton(R.drawable.paint_line, stringResource(R.string.line), tool == PaintTool.LINE) { selectedActionIndex = null; tool = PaintTool.LINE }
-                    ToolButton(R.drawable.paint_line, "Крива", tool == PaintTool.CURVE) { selectedActionIndex = null; commitCurve(); tool = PaintTool.CURVE }
+                    ToolButton(R.drawable.paint_curve, "Крива", tool == PaintTool.CURVE) { selectedActionIndex = null; commitCurve(); tool = PaintTool.CURVE }
                     ToolButton(R.drawable.paint_rectangle, stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { selectedActionIndex = null; tool = PaintTool.RECTANGLE }
                     ToolButton(R.drawable.paint_oval, stringResource(R.string.oval), tool == PaintTool.OVAL) { selectedActionIndex = null; tool = PaintTool.OVAL }
                     ToolButton(R.drawable.paint_text, stringResource(R.string.text_tool), tool == PaintTool.TEXT) { selectedActionIndex = null; tool = PaintTool.TEXT }
