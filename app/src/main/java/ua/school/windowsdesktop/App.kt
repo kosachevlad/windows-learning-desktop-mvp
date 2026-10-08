@@ -11,6 +11,7 @@ import android.widget.EditText
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.graphics.Typeface
+import android.view.Gravity
 import java.io.File
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.viewinterop.AndroidView
@@ -846,9 +847,10 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                     }
                 }
             }
-            TextButton(onClick = { alignment = TextAlign.Left }) { Text("≡") }
-            TextButton(onClick = { alignment = TextAlign.Center }) { Text("☰") }
-            TextButton(onClick = { alignment = TextAlign.Right }) { Text("≡") }
+            IconButton(onClick = { alignment = TextAlign.Left }, modifier = Modifier.background(if (alignment == TextAlign.Left) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_left), "За лівим краєм", tint = Color.Unspecified) }
+            IconButton(onClick = { alignment = TextAlign.Center }, modifier = Modifier.background(if (alignment == TextAlign.Center) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_center), "По центру", tint = Color.Unspecified) }
+            IconButton(onClick = { alignment = TextAlign.Right }, modifier = Modifier.background(if (alignment == TextAlign.Right) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_right), "За правим краєм", tint = Color.Unspecified) }
+            IconButton(onClick = { alignment = TextAlign.Justify }, modifier = Modifier.background(if (alignment == TextAlign.Justify) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_justify), "За шириною", tint = Color.Unspecified) }
         }
         val pageChunks = text.split('\n').chunked(35).ifEmpty { listOf(listOf("")) }
         val pageCount = pageChunks.size
@@ -880,6 +882,13 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                             bold = bold,
                             italic = italic,
                             underline = underline,
+                            textGravity = Gravity.TOP or (when (alignment) {
+                                TextAlign.Center -> Gravity.CENTER_HORIZONTAL
+                                TextAlign.Right -> Gravity.END
+                                TextAlign.Justify -> Gravity.START
+                                else -> Gravity.START
+                            }),
+                            justify = alignment == TextAlign.Justify,
                         )
                     }
                     if (pageIndex < pageChunks.lastIndex) Spacer(Modifier.height(12.dp))

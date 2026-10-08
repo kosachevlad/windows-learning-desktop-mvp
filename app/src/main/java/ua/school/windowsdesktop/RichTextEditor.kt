@@ -15,6 +15,7 @@ import android.text.style.UnderlineSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
 import android.text.style.StyleSpan
+import android.text.Layout
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,6 +40,8 @@ fun RichTextEditor(
     italic: Boolean = false,
     underline: Boolean = false,
     onSelectionStyleChanged: (SelectionStyle) -> Unit = {},
+    textGravity: Int = Gravity.TOP or Gravity.START,
+    justify: Boolean = false,
 ) {
     AndroidView(
         modifier = modifier,
@@ -68,6 +71,8 @@ fun RichTextEditor(
             }
             // Do not reset typeface or textSize here: those are selection spans.
             // Updating them on every recomposition would restyle the whole document.
+            editor.gravity = textGravity
+            editor.justificationMode = if (justify) Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE
             onEditorReady(editor)
             editor.onSelectionChangedCallback = { onSelectionStyleChanged(selectionStyle(editor)) }
         },
