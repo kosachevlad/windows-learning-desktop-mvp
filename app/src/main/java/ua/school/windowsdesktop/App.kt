@@ -835,7 +835,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             TextButton(onClick = ::save) { Text("Зберегти") }
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.BOLD)) } }) { Text("Ж", fontWeight = FontWeight.Bold) }
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.ITALIC)) } }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
-            TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, UnderlineSpan()) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
+            TextButton(onClick = { activeEditor?.let { toggleUnderlineSelection(it) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
             DropdownMenuBox(font, listOf("Times New Roman", "Courier New", "Calibri")) { font = it; activeEditor?.let { editor -> applyFontToSelection(editor, it) } }
             DropdownMenuBox(size, listOf("10", "11", "12", "14", "16", "18", "24")) { size = it; activeEditor?.let { editor -> applySizeToSelection(editor, it.toInt()) } }
             Box {
@@ -869,6 +869,12 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                             },
                             modifier = Modifier.fillMaxSize().padding(66.dp, 70.dp),
                             onEditorReady = { activeEditor = it },
+                            onSelectionStyleChanged = { style ->
+                                size = style.size.toString()
+                                bold = style.bold
+                                italic = style.italic
+                                underline = style.underline
+                            },
                             fontFamily = font,
                             fontSize = size.toInt(),
                             bold = bold,
