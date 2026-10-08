@@ -7,6 +7,7 @@ import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Path
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -52,7 +53,7 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
 
-internal enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, RECTANGLE, OVAL, TEXT }
+internal enum class PaintTool { PENCIL, BRUSH, ERASER, FILL, LINE, CURVE, RECTANGLE, OVAL, TEXT }
 internal data class PaintAction(
     val tool: PaintTool,
     val points: List<Offset>,
@@ -94,6 +95,8 @@ fun PaintScreen(
     var saveAsName by remember { mutableStateOf("") }
     var textPosition by remember { mutableStateOf<Offset?>(null) }
     var enteredText by remember { mutableStateOf("") }
+    var activeCurve by remember { mutableStateOf<PaintAction?>(null) }
+    var curveStage by remember { mutableIntStateOf(0) }
     var fileMenu by remember { mutableStateOf(false) }
     var editMenu by remember { mutableStateOf(false) }
     var viewMenu by remember { mutableStateOf(false) }
@@ -139,6 +142,7 @@ fun PaintScreen(
     fun undo() { selectedActionIndex = null; if (actions.isNotEmpty()) { redoActions = redoActions + actions.last(); actions = actions.dropLast(1); dirty = true } }
     fun redo() { selectedActionIndex = null; if (redoActions.isNotEmpty()) { actions = actions + redoActions.last(); redoActions = redoActions.dropLast(1); dirty = true } }
     fun clear() { selectedActionIndex = null; baseBitmap = null; actions = emptyList(); redoActions = emptyList(); dirty = true }
+    fun commitCurve() { activeCurve?.let { if (it.points.size == 4) { actions = actions + it; redoActions = emptyList(); dirty = true } }; activeCurve = null; curveStage = 0 }
 
     BackHandler { requestClose() }
     Column(Modifier.fillMaxSize().background(Color(0xFFF2F2F2)).focusRequester(paintFocusRequester).focusTarget().onPreviewKeyEvent { event ->
@@ -184,13 +188,14 @@ fun PaintScreen(
                     ToolButton(R.drawable.paint_eraser, stringResource(R.string.eraser), tool == PaintTool.ERASER) { selectedActionIndex = null; tool = PaintTool.ERASER }
                     ToolButton(R.drawable.paint_fill, stringResource(R.string.fill), tool == PaintTool.FILL) { selectedActionIndex = null; tool = PaintTool.FILL }
                     ToolButton(R.drawable.paint_line, stringResource(R.string.line), tool == PaintTool.LINE) { selectedActionIndex = null; tool = PaintTool.LINE }
+                    ToolButton(R.drawable.paint_line, "Крива", tool == PaintTool.CURVE) { selectedActionIndex = null; commitCurve(); tool = PaintTool.CURVE }
                     ToolButton(R.drawable.paint_rectangle, stringResource(R.string.rectangle), tool == PaintTool.RECTANGLE) { selectedActionIndex = null; tool = PaintTool.RECTANGLE }
                     ToolButton(R.drawable.paint_oval, stringResource(R.string.oval), tool == PaintTool.OVAL) { selectedActionIndex = null; tool = PaintTool.OVAL }
                     ToolButton(R.drawable.paint_text, stringResource(R.string.text_tool), tool == PaintTool.TEXT) { selectedActionIndex = null; tool = PaintTool.TEXT }
                 }
                 if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else {
-                val previewBitmap = remember(canvasSize, baseBitmap, actions) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null }
+                val previewBitmap = remember(canvasSize, baseBitmap, actions, activeCurve) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions, activeCurve) else null }
                 val selectedBounds = selectedActionIndex?.let { actions.getOrNull(it)?.let(::actionBounds) }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
@@ -242,6 +247,23 @@ fun PaintScreen(
                             return@awaitEachGesture
                         }
                         val gestureTool = tool
+                        if (gestureTool == PaintTool.CURVE) {
+                            val start = down.position
+                            var released = false
+                            do {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                val point = change.position
+                                activeCurve = when (curveStage) {
+                                    0 -> PaintAction(PaintTool.CURVE, listOf(start, start + (point - start) / 3f, start + (point - start) * 2f / 3f, point), selectedColor, selectedWidth)
+                                    1 -> activeCurve?.copy(points = activeCurve!!.points.toMutableList().also { it[1] = point })
+                                    else -> activeCurve?.copy(points = activeCurve!!.points.toMutableList().also { it[2] = point })
+                                }
+                                change.consume(); released = !change.pressed
+                            } while (!released)
+                            if (released) { curveStage = if (curveStage < 2) curveStage + 1 else 0; if (curveStage == 0) commitCurve() }
+                            return@awaitEachGesture
+                        }
                         if (gestureTool == PaintTool.TEXT || gestureTool == PaintTool.FILL) {
                             var released = false
                             do {
@@ -361,11 +383,11 @@ private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>):
     return ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
 }
 
-private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction>): Bitmap {
+private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction>, activeCurve: PaintAction? = null): Bitmap {
     val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
     val canvas = AndroidCanvas(bitmap); canvas.drawColor(AndroidColor.WHITE)
     base?.let { canvas.drawBitmap(it, null, Rect(0, 0, size.width, size.height), null) }
-    actions.forEach { action ->
+    (actions + listOfNotNull(activeCurve)).forEach { action ->
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = action.color; strokeWidth = action.width; strokeCap = Paint.Cap.ROUND; style = Paint.Style.STROKE }
         val start = action.points.firstOrNull() ?: return@forEach
         val end = action.points.lastOrNull() ?: return@forEach
@@ -373,6 +395,10 @@ private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction
             PaintTool.PENCIL, PaintTool.BRUSH, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
             PaintTool.FILL -> floodFill(bitmap, start.x.toInt(), start.y.toInt(), action.color)
             PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
+            PaintTool.CURVE -> if (action.points.size >= 4) {
+                val path = Path().apply { moveTo(start.x, start.y); cubicTo(action.points[1].x, action.points[1].y, action.points[2].x, action.points[2].y, action.points[3].x, action.points[3].y) }
+                canvas.drawPath(path, paint)
+            }
             PaintTool.RECTANGLE -> canvas.drawRect(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
             PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
             PaintTool.TEXT -> {
