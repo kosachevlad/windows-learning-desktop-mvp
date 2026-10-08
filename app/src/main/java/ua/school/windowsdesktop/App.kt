@@ -826,7 +826,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     fun requestClose() { if (text != saved) closeRequested = true else onClose() }
     BackHandler(onBack = ::requestClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
-        Row(Modifier.fillMaxWidth().background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEachIndexed { index, tab ->
                 Text(tab, color = Color.White, modifier = Modifier.background(if (index == 1) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (index == 1) Color(0xFF234A87) else Color.White))
             }
