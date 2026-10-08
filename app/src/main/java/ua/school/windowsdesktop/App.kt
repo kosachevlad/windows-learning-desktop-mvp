@@ -154,6 +154,7 @@ fun WindowsLearningDesktopApp(
                         onOpen = { screen = AppScreen.Word(it) },
                     )
                     is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
+                        onHome = { screen = AppScreen.WordHome },
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
@@ -806,7 +807,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     )
 }
 
-@Composable private fun WordEditorScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onClose: () -> Unit, onError: (String) -> Unit, showFileExtensions: Boolean) {
+@Composable private fun WordEditorScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onHome: () -> Unit, onClose: () -> Unit, onError: (String) -> Unit, showFileExtensions: Boolean) {
     val scope = rememberCoroutineScope()
     var text by remember(file?.id) { mutableStateOf("") }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
@@ -820,15 +821,16 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var activeEditor by remember { mutableStateOf<EditText?>(null) }
     var textColorMenu by remember { mutableStateOf(false) }
     var justifyText by remember { mutableStateOf(false) }
+    var wordTab by remember { mutableStateOf("Основне") }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
-    fun save(after: () -> Unit = {}) { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text; after() }.onFailure { onError(errorMessage(it)) } } }
+    fun save(after: () -> Unit = {}) { scope.launch { runCatching { if (file == null) repository.createText("Новий документ.docx", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text; after() }.onFailure { onError(errorMessage(it)) } } }
     fun requestClose() { if (text != saved) closeRequested = true else onClose() }
     BackHandler(onBack = ::requestClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
         Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEachIndexed { index, tab ->
-                Text(tab, color = Color.White, modifier = Modifier.background(if (index == 1) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (index == 1) Color(0xFF234A87) else Color.White))
+            listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEach { tab ->
+                Text(tab, color = Color.White, modifier = Modifier.clickable { if (tab == "Файл") onHome() else wordTab = tab }.background(if (wordTab == tab) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (wordTab == tab) Color(0xFF234A87) else Color.White))
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = ::requestClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
@@ -916,6 +918,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             Text("Word", color = Color.White, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(28.dp, 30.dp))
             Text("□\nСтворити", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
             Text("▱\nВідкрити", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
+            Text("↓\nЗберегти", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
+            Text("⇩\nЗберегти як", color = Color.White, modifier = Modifier.fillMaxWidth().padding(24.dp, 12.dp).padding(16.dp))
             Spacer(Modifier.weight(1f))
             Text("Параметри", color = Color.White, modifier = Modifier.padding(24.dp))
         }
@@ -1114,7 +1118,7 @@ internal fun displayFileName(name: String, kind: FileKind, showFileExtensions: B
 
 internal fun fileIcon(node: FileNode): Int = when (node.kind) {
     FileKind.FOLDER -> R.drawable.folder_icon
-    FileKind.TEXT -> R.drawable.text_icon
+    FileKind.TEXT -> if (node.name.endsWith(".docx", true)) R.drawable.start_word else R.drawable.text_icon
     FileKind.PAINT -> if (node.name.endsWith(".mp3", true)) R.drawable.music_icon else R.drawable.image_icon
 }
 
