@@ -51,10 +51,8 @@ fun RichTextEditor(
                 editor.setText(value)
                 editor.setSelection(selection)
             }
-            // Keep the base font only. Bold/italic/underline are stored as spans
-            // on the selected range and must not be reset on recomposition.
-            editor.typeface = Typeface.create(when (fontFamily) { "Times New Roman" -> Typeface.SERIF; "Courier New" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, Typeface.NORMAL)
-            editor.textSize = fontSize.toFloat()
+            // Do not reset typeface or textSize here: those are selection spans.
+            // Updating them on every recomposition would restyle the whole document.
             onEditorReady(editor)
         },
     )
