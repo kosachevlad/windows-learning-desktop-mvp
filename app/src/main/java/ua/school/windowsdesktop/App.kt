@@ -1092,7 +1092,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     )
 }
 
-@Composable internal fun WindowTitle(title: String, onClose: () -> Unit) = Row(Modifier.fillMaxWidth().background(Color(0xFF1F4E79)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+@Composable internal fun WindowTitle(title: String, onClose: () -> Unit) = Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).background(Color(0xFF1F4E79)).padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
     TextButton(onClick = onClose, modifier = Modifier.semantics { contentDescription = "Закрити" }) { Text("×", color = Color.White, style = MaterialTheme.typography.headlineSmall) }
 }
