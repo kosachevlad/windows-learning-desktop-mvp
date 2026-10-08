@@ -37,6 +37,8 @@ fun RichTextEditor(
                 setPadding(0, 0, 0, 0)
                 setSingleLine(false)
                 gravity = Gravity.TOP or Gravity.START
+                setLineSpacing(0f, 1f)
+                includeFontPadding = true
                 addTextChangedListener(object : TextWatcher {
                     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { onValueChange(s?.toString().orEmpty()) }
@@ -63,6 +65,8 @@ fun applySpanToSelection(editor: EditText, span: Any) {
     val end = editor.selectionEnd.coerceAtLeast(start)
     if (start == end) return
     editor.text.setSpan(span, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    editor.requestLayout()
+    editor.invalidate()
 }
 
 fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelection(editor, TypefaceSpan(when (family) {
