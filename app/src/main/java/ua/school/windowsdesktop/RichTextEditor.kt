@@ -8,6 +8,9 @@ import android.text.TextWatcher
 import android.widget.EditText
 import android.graphics.Typeface
 import android.view.Gravity
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.TypefaceSpan
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -63,3 +66,7 @@ fun applySpanToSelection(editor: EditText, span: Any) {
     if (start == end) return
     editor.text.setSpan(span, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
 }
+
+fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelection(editor, TypefaceSpan(family))
+fun applySizeToSelection(editor: EditText, sizeSp: Int) = applySpanToSelection(editor, AbsoluteSizeSpan(sizeSp, true))
+fun applyColorToSelection(editor: EditText, color: Int) = applySpanToSelection(editor, ForegroundColorSpan(color))

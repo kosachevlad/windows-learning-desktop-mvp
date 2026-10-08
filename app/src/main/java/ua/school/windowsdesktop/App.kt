@@ -31,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -816,6 +817,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var underline by remember { mutableStateOf(false) }
     var alignment by remember { mutableStateOf(TextAlign.Left) }
     var activeEditor by remember { mutableStateOf<EditText?>(null) }
+    var textColorMenu by remember { mutableStateOf(false) }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     fun save() { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text }.onFailure { onError(errorMessage(it)) } } }
     BackHandler(onBack = onClose)
@@ -830,8 +832,16 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.BOLD)) } }) { Text("Ж", fontWeight = FontWeight.Bold) }
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.ITALIC)) } }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, UnderlineSpan()) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
-            DropdownMenuBox(font, listOf("Times New Roman", "Courier New", "Calibri")) { font = it }
-            DropdownMenuBox(size, listOf("10", "11", "12", "14", "16", "18", "24")) { size = it }
+            DropdownMenuBox(font, listOf("Times New Roman", "Courier New", "Calibri")) { font = it; activeEditor?.let { editor -> applyFontToSelection(editor, it) } }
+            DropdownMenuBox(size, listOf("10", "11", "12", "14", "16", "18", "24")) { size = it; activeEditor?.let { editor -> applySizeToSelection(editor, it.toInt()) } }
+            Box {
+                TextButton(onClick = { textColorMenu = true }) { Text("A", color = Color.Red) }
+                DropdownMenu(textColorMenu, { textColorMenu = false }) {
+                    listOf(Color.Black, Color.Red, Color(0xFF1976D2), Color(0xFF2E7D32), Color(0xFF7B1FA2)).forEach { color ->
+                        DropdownMenuItem(text = { Text("Колір", color = color) }, onClick = { activeEditor?.let { editor -> applyColorToSelection(editor, color.toArgb()) }; textColorMenu = false })
+                    }
+                }
+            }
             TextButton(onClick = { alignment = TextAlign.Left }) { Text("≡") }
             TextButton(onClick = { alignment = TextAlign.Center }) { Text("☰") }
             TextButton(onClick = { alignment = TextAlign.Right }) { Text("≡") }
