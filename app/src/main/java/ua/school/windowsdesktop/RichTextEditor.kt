@@ -16,6 +16,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
 import android.text.style.StyleSpan
 import android.text.Layout
+import android.text.style.AlignmentSpan
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -122,6 +123,17 @@ fun toggleUnderlineSelection(editor: EditText) {
     val spans = editor.text.getSpans(start, end, UnderlineSpan::class.java)
     if (spans.isNotEmpty()) spans.forEach { editor.text.removeSpan(it) }
     else editor.text.setSpan(UnderlineSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    refreshEditorLayout(editor)
+}
+
+fun applyAlignmentToParagraph(editor: EditText, alignment: Layout.Alignment) {
+    val text = editor.text
+    val cursor = editor.selectionStart.coerceAtLeast(0)
+    val selectionEnd = editor.selectionEnd.coerceAtLeast(cursor)
+    val start = text.toString().lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+    val end = text.toString().indexOf('\n', selectionEnd).let { if (it < 0) text.length else it }
+    text.getSpans(start, end, AlignmentSpan.Standard::class.java).forEach { text.removeSpan(it) }
+    text.setSpan(AlignmentSpan.Standard(alignment), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     refreshEditorLayout(editor)
 }
 

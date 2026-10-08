@@ -819,6 +819,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var alignment by remember { mutableStateOf(TextAlign.Left) }
     var activeEditor by remember { mutableStateOf<EditText?>(null) }
     var textColorMenu by remember { mutableStateOf(false) }
+    var justifyText by remember { mutableStateOf(false) }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
     fun save(after: () -> Unit = {}) { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text; after() }.onFailure { onError(errorMessage(it)) } } }
@@ -847,10 +848,10 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                     }
                 }
             }
-            IconButton(onClick = { alignment = TextAlign.Left }, modifier = Modifier.background(if (alignment == TextAlign.Left) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_left), "За лівим краєм", tint = Color.Unspecified) }
-            IconButton(onClick = { alignment = TextAlign.Center }, modifier = Modifier.background(if (alignment == TextAlign.Center) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_center), "По центру", tint = Color.Unspecified) }
-            IconButton(onClick = { alignment = TextAlign.Right }, modifier = Modifier.background(if (alignment == TextAlign.Right) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_right), "За правим краєм", tint = Color.Unspecified) }
-            IconButton(onClick = { alignment = TextAlign.Justify }, modifier = Modifier.background(if (alignment == TextAlign.Justify) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_justify), "За шириною", tint = Color.Unspecified) }
+            IconButton(onClick = { activeEditor?.let { applyAlignmentToParagraph(it, android.text.Layout.Alignment.ALIGN_NORMAL) } }, modifier = Modifier.background(Color.Transparent)) { Icon(painterResource(R.drawable.word_align_left), "За лівим краєм", tint = Color.Unspecified) }
+            IconButton(onClick = { activeEditor?.let { applyAlignmentToParagraph(it, android.text.Layout.Alignment.ALIGN_CENTER) } }, modifier = Modifier.background(Color.Transparent)) { Icon(painterResource(R.drawable.word_align_center), "По центру", tint = Color.Unspecified) }
+            IconButton(onClick = { activeEditor?.let { applyAlignmentToParagraph(it, android.text.Layout.Alignment.ALIGN_OPPOSITE) } }, modifier = Modifier.background(Color.Transparent)) { Icon(painterResource(R.drawable.word_align_right), "За правим краєм", tint = Color.Unspecified) }
+            IconButton(onClick = { justifyText = true }, modifier = Modifier.background(if (justifyText) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_justify), "За шириною", tint = Color.Unspecified) }
         }
         val pageChunks = text.split('\n').chunked(35).ifEmpty { listOf(listOf("")) }
         val pageCount = pageChunks.size
@@ -882,13 +883,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                             bold = bold,
                             italic = italic,
                             underline = underline,
-                            textGravity = Gravity.TOP or (when (alignment) {
-                                TextAlign.Center -> Gravity.CENTER_HORIZONTAL
-                                TextAlign.Right -> Gravity.END
-                                TextAlign.Justify -> Gravity.START
-                                else -> Gravity.START
-                            }),
-                            justify = alignment == TextAlign.Justify,
+                            textGravity = Gravity.TOP or Gravity.START,
+                            justify = justifyText,
                         )
                     }
                     if (pageIndex < pageChunks.lastIndex) Spacer(Modifier.height(12.dp))
