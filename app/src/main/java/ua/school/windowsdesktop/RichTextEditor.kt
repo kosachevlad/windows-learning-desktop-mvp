@@ -7,6 +7,7 @@ import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.widget.EditText
 import android.graphics.Typeface
+import android.view.Gravity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,6 +33,7 @@ fun RichTextEditor(
                 setBackgroundColor(AndroidColor.TRANSPARENT)
                 setPadding(0, 0, 0, 0)
                 setSingleLine(false)
+                gravity = Gravity.TOP or Gravity.START
                 addTextChangedListener(object : TextWatcher {
                     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { onValueChange(s?.toString().orEmpty()) }
@@ -46,9 +48,10 @@ fun RichTextEditor(
                 editor.setText(value)
                 editor.setSelection(selection)
             }
-            editor.typeface = Typeface.create(when (fontFamily) { "Times New Roman" -> Typeface.SERIF; "Courier New" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, when { bold && italic -> Typeface.BOLD_ITALIC; bold -> Typeface.BOLD; italic -> Typeface.ITALIC; else -> Typeface.NORMAL })
+            // Keep the base font only. Bold/italic/underline are stored as spans
+            // on the selected range and must not be reset on recomposition.
+            editor.typeface = Typeface.create(when (fontFamily) { "Times New Roman" -> Typeface.SERIF; "Courier New" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, Typeface.NORMAL)
             editor.textSize = fontSize.toFloat()
-            editor.paint.isUnderlineText = underline
             onEditorReady(editor)
         },
     )

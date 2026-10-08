@@ -827,9 +827,9 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = ::save) { Text("Зберегти") }
-            TextButton(onClick = { bold = !bold; activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.BOLD)) } }) { Text("Ж", fontWeight = FontWeight.Bold) }
-            TextButton(onClick = { italic = !italic; activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.ITALIC)) } }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
-            TextButton(onClick = { underline = !underline; activeEditor?.let { applySpanToSelection(it, UnderlineSpan()) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
+            TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.BOLD)) } }) { Text("Ж", fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.ITALIC)) } }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
+            TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, UnderlineSpan()) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
             DropdownMenuBox(font, listOf("Times New Roman", "Courier New", "Calibri")) { font = it }
             DropdownMenuBox(size, listOf("10", "11", "12", "14", "16", "18", "24")) { size = it }
             TextButton(onClick = { alignment = TextAlign.Left }) { Text("≡") }
