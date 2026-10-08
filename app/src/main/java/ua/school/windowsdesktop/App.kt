@@ -829,8 +829,13 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     BackHandler(onBack = ::requestClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
         Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (wordTab == "Файл") {
+                IconButton(onClick = { wordTab = "Основне" }) {
+                    Text("←", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                }
+            }
             listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEach { tab ->
-                Text(tab, color = Color.White, modifier = Modifier.clickable { if (tab == "Файл") onHome() else wordTab = tab }.background(if (wordTab == tab) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (wordTab == tab) Color(0xFF234A87) else Color.White))
+                Text(tab, modifier = Modifier.clickable { wordTab = tab }.background(if (wordTab == tab) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (wordTab == tab) Color(0xFF234A87) else Color.White))
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = ::requestClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
