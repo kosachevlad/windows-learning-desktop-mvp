@@ -8,6 +8,7 @@ import android.text.TextWatcher
 import android.widget.EditText
 import android.graphics.Typeface
 import android.view.Gravity
+import kotlin.math.roundToInt
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.UnderlineSpan
@@ -76,8 +77,11 @@ fun RichTextEditor(
 private fun selectionStyle(editor: EditText): SelectionStyle {
     val start = editor.selectionStart.coerceAtLeast(0); val end = editor.selectionEnd.coerceAtLeast(start)
     val styles = editor.text.getSpans(start, end, StyleSpan::class.java)
+    val absolute = editor.text.getSpans(start, end, AbsoluteSizeSpan::class.java).firstOrNull()?.size
+    val relative = editor.text.getSpans(start, end, RelativeSizeSpan::class.java).firstOrNull()?.sizeChange
+    val selectedSize = absolute ?: relative?.let { (it * 11f).roundToInt() } ?: 11
     return SelectionStyle(
-        size = editor.text.getSpans(start, end, AbsoluteSizeSpan::class.java).firstOrNull()?.size ?: 11,
+        size = selectedSize,
         bold = styles.any { it.style == Typeface.BOLD || it.style == Typeface.BOLD_ITALIC },
         italic = styles.any { it.style == Typeface.ITALIC || it.style == Typeface.BOLD_ITALIC },
         underline = editor.text.getSpans(start, end, UnderlineSpan::class.java).isNotEmpty(),
@@ -101,9 +105,9 @@ fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelectio
 fun applySizeToSelection(editor: EditText, sizeSp: Int) {
     val start = editor.selectionStart.coerceAtLeast(0); val end = editor.selectionEnd.coerceAtLeast(start)
     if (start == end) return
-    editor.text.getSpans(start, end, AbsoluteSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
     editor.text.getSpans(start, end, RelativeSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
-    editor.text.setSpan(AbsoluteSizeSpan(sizeSp, true), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    editor.text.getSpans(start, end, AbsoluteSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
+    editor.text.setSpan(RelativeSizeSpan(sizeSp / 11f), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     editor.requestLayout(); editor.invalidate()
 }
 fun applyColorToSelection(editor: EditText, color: Int) = applySpanToSelection(editor, ForegroundColorSpan(color))
