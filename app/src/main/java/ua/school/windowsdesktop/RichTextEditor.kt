@@ -93,8 +93,7 @@ fun applySpanToSelection(editor: EditText, span: Any) {
     val end = editor.selectionEnd.coerceAtLeast(start)
     if (start == end) return
     editor.text.setSpan(span, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-    editor.requestLayout()
-    editor.invalidate()
+    refreshEditorLayout(editor)
 }
 
 fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelection(editor, TypefaceSpan(when (family) {
@@ -108,7 +107,7 @@ fun applySizeToSelection(editor: EditText, sizeSp: Int) {
     editor.text.getSpans(start, end, RelativeSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
     editor.text.getSpans(start, end, AbsoluteSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
     editor.text.setSpan(RelativeSizeSpan(sizeSp / 11f), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-    editor.requestLayout(); editor.invalidate()
+    refreshEditorLayout(editor)
 }
 fun applyColorToSelection(editor: EditText, color: Int) = applySpanToSelection(editor, ForegroundColorSpan(color))
 
@@ -118,5 +117,14 @@ fun toggleUnderlineSelection(editor: EditText) {
     val spans = editor.text.getSpans(start, end, UnderlineSpan::class.java)
     if (spans.isNotEmpty()) spans.forEach { editor.text.removeSpan(it) }
     else editor.text.setSpan(UnderlineSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    refreshEditorLayout(editor)
+}
+
+private fun refreshEditorLayout(editor: EditText) {
+    val start = editor.selectionStart.coerceAtLeast(0)
+    val end = editor.selectionEnd.coerceAtLeast(start)
+    editor.setText(SpannableStringBuilder(editor.text))
+    editor.setSelection(start.coerceAtMost(editor.length()), end.coerceAtMost(editor.length()))
+    editor.requestLayout()
     editor.invalidate()
 }
