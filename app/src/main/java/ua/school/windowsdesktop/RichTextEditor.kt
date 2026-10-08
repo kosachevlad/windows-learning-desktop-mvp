@@ -20,8 +20,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 data class SelectionStyle(val size: Int = 11, val bold: Boolean = false, val italic: Boolean = false, val underline: Boolean = false)
 
 private class SelectionEditText(context: android.content.Context) : EditText(context) {
-    var onSelectionChangedCallback: () -> Unit = {}
-    override fun onSelectionChanged(selStart: Int, selEnd: Int) { super.onSelectionChanged(selStart, selEnd); onSelectionChangedCallback() }
+    var onSelectionChangedCallback: (() -> Unit)? = null
+    override fun onSelectionChanged(selStart: Int, selEnd: Int) { super.onSelectionChanged(selStart, selEnd); onSelectionChangedCallback?.invoke() }
 }
 
 /** Editable text surface that exposes selection and spans to the Compose toolbar. */
