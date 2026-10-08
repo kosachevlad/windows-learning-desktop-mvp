@@ -8,7 +8,7 @@ import android.text.TextWatcher
 import android.widget.EditText
 import android.graphics.Typeface
 import android.view.Gravity
-import android.text.style.AbsoluteSizeSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
 import androidx.compose.runtime.Composable
@@ -70,5 +70,5 @@ fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelectio
     "Courier New" -> "monospace"
     else -> "sans-serif"
 }))
-fun applySizeToSelection(editor: EditText, sizeSp: Int) = applySpanToSelection(editor, AbsoluteSizeSpan(sizeSp, true))
+fun applySizeToSelection(editor: EditText, sizeSp: Int) = applySpanToSelection(editor, RelativeSizeSpan(sizeSp / 11f))
 fun applyColorToSelection(editor: EditText, color: Int) = applySpanToSelection(editor, ForegroundColorSpan(color))

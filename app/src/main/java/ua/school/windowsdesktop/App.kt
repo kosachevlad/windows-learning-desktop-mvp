@@ -153,7 +153,7 @@ fun WindowsLearningDesktopApp(
                         onOpen = { screen = AppScreen.Word(it) },
                     )
                     is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.WordHome },
+                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
@@ -819,15 +819,17 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var activeEditor by remember { mutableStateOf<EditText?>(null) }
     var textColorMenu by remember { mutableStateOf(false) }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
-    fun save() { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text }.onFailure { onError(errorMessage(it)) } } }
-    BackHandler(onBack = onClose)
+    var closeRequested by remember { mutableStateOf(false) }
+    fun save(after: () -> Unit = {}) { scope.launch { runCatching { if (file == null) repository.createText("Новий документ", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text; after() }.onFailure { onError(errorMessage(it)) } } }
+    fun requestClose() { if (text != saved) closeRequested = true else onClose() }
+    BackHandler(onBack = ::requestClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
         Row(Modifier.fillMaxWidth().background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEachIndexed { index, tab ->
                 Text(tab, color = Color.White, modifier = Modifier.background(if (index == 1) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (index == 1) Color(0xFF234A87) else Color.White))
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+            IconButton(onClick = ::requestClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = ::save) { Text("Зберегти") }
@@ -882,6 +884,13 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             Text("Сторінка 1 з $pageCount", Modifier.weight(1f)); Text("Слів: ${text.trim().split(Regex("\\s+")).count { it.isNotBlank() }}"); Text("− 100% +", Modifier.padding(start = 24.dp))
         }
     }
+    if (closeRequested) AlertDialog(
+        onDismissRequest = { closeRequested = false },
+        title = { Text("Зберегти зміни?") },
+        text = { Text("Документ було змінено. Зберегти його перед виходом?") },
+        confirmButton = { TextButton(onClick = { closeRequested = false; save(onClose) }) { Text("Зберегти") } },
+        dismissButton = { Row { TextButton(onClick = { closeRequested = false; onClose() }) { Text("Не зберігати") }; TextButton(onClick = { closeRequested = false }) { Text("Скасувати") } } },
+    )
 }
 
 @Composable private fun DropdownMenuBox(value: String, options: List<String>, onSelect: (String) -> Unit) {
