@@ -826,6 +826,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEachIndexed { index, tab ->
                 Text(tab, color = Color.White, modifier = Modifier.background(if (index == 1) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (index == 1) Color(0xFF234A87) else Color.White))
             }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = ::save) { Text("Зберегти") }

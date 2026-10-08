@@ -65,6 +65,10 @@ fun applySpanToSelection(editor: EditText, span: Any) {
     editor.text.setSpan(span, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
 }
 
-fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelection(editor, TypefaceSpan(family))
+fun applyFontToSelection(editor: EditText, family: String) = applySpanToSelection(editor, TypefaceSpan(when (family) {
+    "Times New Roman" -> "serif"
+    "Courier New" -> "monospace"
+    else -> "sans-serif"
+}))
 fun applySizeToSelection(editor: EditText, sizeSp: Int) = applySpanToSelection(editor, AbsoluteSizeSpan(sizeSp, true))
 fun applyColorToSelection(editor: EditText, color: Int) = applySpanToSelection(editor, ForegroundColorSpan(color))
