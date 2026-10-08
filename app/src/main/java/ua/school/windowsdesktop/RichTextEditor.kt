@@ -9,6 +9,7 @@ import android.widget.EditText
 import android.graphics.Typeface
 import android.view.Gravity
 import android.text.style.AbsoluteSizeSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.UnderlineSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
@@ -101,6 +102,7 @@ fun applySizeToSelection(editor: EditText, sizeSp: Int) {
     val start = editor.selectionStart.coerceAtLeast(0); val end = editor.selectionEnd.coerceAtLeast(start)
     if (start == end) return
     editor.text.getSpans(start, end, AbsoluteSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
+    editor.text.getSpans(start, end, RelativeSizeSpan::class.java).forEach { editor.text.removeSpan(it) }
     editor.text.setSpan(AbsoluteSizeSpan(sizeSp, true), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     editor.requestLayout(); editor.invalidate()
 }
