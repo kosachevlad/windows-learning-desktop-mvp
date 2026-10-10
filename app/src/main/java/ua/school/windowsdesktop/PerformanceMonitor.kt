@@ -3,11 +3,11 @@ package ua.school.windowsdesktop
 import android.app.Activity
 import android.app.ActivityManager
 import android.content.Context
-import android.os.FrameMetrics
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.FrameMetrics
 
 /**
  * Debug-only, low-overhead telemetry for profiling on a physical tablet.
