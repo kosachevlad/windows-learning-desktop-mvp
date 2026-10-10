@@ -60,7 +60,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.*
 
@@ -86,10 +88,23 @@ fun WindowsLearningDesktopApp(
 ) {
     val snapshot by repository.snapshots.collectAsState()
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Desktop) }
+    var screenRequestedAtMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
     var showFileExtensions by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val nodes = remember(snapshot) { snapshot.nodes.values.toList() }
+    fun open(next: AppScreen) {
+        screenRequestedAtMs = android.os.SystemClock.elapsedRealtime()
+        PerformanceMonitor.markScreenRequested(next.javaClass.simpleName)
+        screen = next
+    }
+    LaunchedEffect(screen) {
+        withFrameNanos { PerformanceMonitor.markScreenDisplayed(screen.javaClass.simpleName, screenRequestedAtMs) }
+    }
+    LaunchedEffect(repository) {
+        withFrameNanos { PerformanceMonitor.markContentReady("Desktop") }
+    }
     LaunchedEffect(repository) {
         val standardFolders = listOf("Відеозаписи", "Документи", "Завантаження", "Зображення", "Музика")
         var rootChildren = repository.children(FileOperations.ROOT_ID)
@@ -102,16 +117,20 @@ fun WindowsLearningDesktopApp(
         val pictures = rootChildren.firstOrNull { it.kind == FileKind.FOLDER && it.name == "Зображення" }
         if (pictures != null && repository.children(pictures.id).none { it.name.endsWith(".jpg", true) }) {
             val photos = listOf("Україна.jpg" to "image1.png", "Україна єдина.jpg" to "image2.png", "Квіти.jpg" to "image5.png", "Друзі.jpg" to "image7.png")
-            photos.forEach { (name, asset) ->
+            val encodedPhotos = withContext(Dispatchers.Default) { photos.map { (name, asset) ->
                 val source = context.assets.open("browser/images/$asset").use { it.readBytes() }
                 val bitmap = BitmapFactory.decodeByteArray(source, 0, source.size)
                 val bytes = ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
+                bitmap.recycle()
+                name to bytes
+            } }
+            encodedPhotos.forEach { (name, bytes) ->
                 repository.createPaint(name, pictures.id, bytes)
             }
         }
         val musicFolder = rootChildren.firstOrNull { it.kind == FileKind.FOLDER && it.name == "Музика" }
         if (musicFolder != null && repository.children(musicFolder.id).none { it.name.endsWith(".mp3", true) }) {
-            val bytes = context.assets.open("music/vivaldi-winter.mp3").use { it.readBytes() }
+            val bytes = withContext(Dispatchers.IO) { context.assets.open("music/vivaldi-winter.mp3").use { it.readBytes() } }
             repository.createPaint("Антоніо Вівальді — Зима.mp3", musicFolder.id, bytes)
         }
     }
@@ -122,47 +141,47 @@ fun WindowsLearningDesktopApp(
                 when (val current = screen) {
                     AppScreen.Desktop -> DesktopScreen(
                         repository = repository,
-                        nodes = snapshot.nodes.values.toList(),
-                        onFiles = { screen = AppScreen.Explorer() },
-                        onComputer = { screen = AppScreen.SystemInfo },
-                        onNotepad = { screen = AppScreen.Notepad() },
-                        onTrash = { screen = AppScreen.Trash },
-                        onPaint = { screen = AppScreen.Paint() },
-                        onBrowser = { screen = AppScreen.Browser },
-                        onFolder = { screen = AppScreen.Explorer(it) },
-                        onText = { screen = AppScreen.Notepad(it) },
-                        onPaintFile = { screen = AppScreen.Paint(it) },
+                        nodes = nodes,
+                        onFiles = { open(AppScreen.Explorer()) },
+                        onComputer = { open(AppScreen.SystemInfo) },
+                        onNotepad = { open(AppScreen.Notepad()) },
+                        onTrash = { open(AppScreen.Trash) },
+                        onPaint = { open(AppScreen.Paint()) },
+                        onBrowser = { open(AppScreen.Browser) },
+                        onFolder = { open(AppScreen.Explorer(it)) },
+                        onText = { open(AppScreen.Notepad(it)) },
+                        onPaintFile = { open(AppScreen.Paint(it)) },
                         onError = { error = it },
                         showFileExtensions = showFileExtensions,
                         trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
                     )
-                    is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, snapshot.nodes.values.toList(),
-                        onFolder = { screen = AppScreen.Explorer(it) }, onText = { screen = AppScreen.Notepad(it, returnFolderId = current.folderId) },
-                        onPaint = { screen = AppScreen.Paint(it, returnFolderId = current.folderId) },
-                        onPhoto = { screen = AppScreen.Photo(it) },
-                        onMusic = { screen = AppScreen.Music(it) },
-                        onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
+                    is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, nodes,
+                        onFolder = { open(AppScreen.Explorer(it)) }, onText = { open(AppScreen.Notepad(it, returnFolderId = current.folderId)) },
+                        onPaint = { open(AppScreen.Paint(it, returnFolderId = current.folderId)) },
+                        onPhoto = { open(AppScreen.Photo(it)) },
+                        onMusic = { open(AppScreen.Music(it)) },
+                        onDesktop = { open(AppScreen.Desktop) }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         showFileExtensions = showFileExtensions)
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
+                        onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
                         onKeyboardLanguage = onKeyboardLanguage, showFileExtensions = showFileExtensions)
                     AppScreen.WordHome -> WordHomeScreen(
-                        nodes = snapshot.nodes.values.toList(),
-                        onNew = { screen = AppScreen.Word() },
-                        onOpen = { screen = AppScreen.Word(it) },
+                        nodes = nodes,
+                        onNew = { open(AppScreen.Word()) },
+                        onOpen = { open(AppScreen.Word(it)) },
                     )
                     is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onHome = { screen = AppScreen.WordHome },
-                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
+                        onHome = { open(AppScreen.WordHome) },
+                        onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
-                        onClose = { screen = current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop },
+                        onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
-                    AppScreen.SystemInfo -> SystemInfoScreen(onClose = { screen = AppScreen.Desktop })
-                    AppScreen.Trash -> TrashScreen(repository, snapshot.nodes.values.toList(),
-                        onDesktop = { screen = AppScreen.Desktop }, onError = { error = it },
+                    AppScreen.SystemInfo -> SystemInfoScreen(onClose = { open(AppScreen.Desktop) })
+                    AppScreen.Trash -> TrashScreen(repository, nodes,
+                        onDesktop = { open(AppScreen.Desktop) }, onError = { error = it },
                         showFileExtensions = showFileExtensions)
                     AppScreen.Browser -> {
                         val downloadsFolder = snapshot.nodes.values.firstOrNull {
@@ -175,24 +194,24 @@ fun WindowsLearningDesktopApp(
                                 snapshot.nodes.values.filter { it.parentId == folder.id && it.trashedAt == null }
                                     .sortedByDescending { it.modifiedAt }
                             }.orEmpty(),
-                            onOpenDownloads = { downloadsFolder?.let { screen = AppScreen.Explorer(it.id) } },
-                            onClose = { screen = AppScreen.Desktop },
+                            onOpenDownloads = { downloadsFolder?.let { open(AppScreen.Explorer(it.id)) } },
+                            onClose = { open(AppScreen.Desktop) },
                         )
                     }
-                    is AppScreen.Photo -> PhotoScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Explorer(FileOperations.ROOT_ID) })
-                    is AppScreen.Music -> MusicScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { screen = AppScreen.Desktop })
+                    is AppScreen.Photo -> PhotoScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { open(AppScreen.Explorer(FileOperations.ROOT_ID)) })
+                    is AppScreen.Music -> MusicScreen(repository, current.fileId?.let(snapshot.nodes::get), onClose = { open(AppScreen.Desktop) })
                 }
             }
             Taskbar(
                 keyboardLanguage = keyboardLanguage,
                 onKeyboardLanguage = onKeyboardLanguage,
-                onDesktop = { screen = AppScreen.Desktop },
-                onFiles = { screen = AppScreen.Explorer() },
-                onNotepad = { screen = AppScreen.Notepad() },
-                onPaint = { screen = AppScreen.Paint() },
-                onBrowser = { screen = AppScreen.Browser },
-                onMusic = { screen = AppScreen.Music(snapshot.nodes.values.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "") },
-                onWord = { screen = AppScreen.WordHome },
+                onDesktop = { open(AppScreen.Desktop) },
+                onFiles = { open(AppScreen.Explorer()) },
+                onNotepad = { open(AppScreen.Notepad()) },
+                onPaint = { open(AppScreen.Paint()) },
+                onBrowser = { open(AppScreen.Browser) },
+                onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
+                onWord = { open(AppScreen.WordHome) },
             )
         }
         }
@@ -329,7 +348,9 @@ fun WindowsLearningDesktopApp(
         val fileName = browserDownloadName(assetName) ?: return
         scope.launch {
             runCatching {
-                val bytes = context.assets.open("browser/images/$assetName").use { it.readBytes() }
+                val bytes = withContext(Dispatchers.IO) {
+                    context.assets.open("browser/images/$assetName").use { it.readBytes() }
+                }
                 val name = nextBrowserDownloadName(fileName, repository.children(folderId))
                 repository.createPaint(name, folderId, bytes)
             }.onFailure { downloadError = "Не вдалося завантажити зображення" }
@@ -339,7 +360,9 @@ fun WindowsLearningDesktopApp(
         val folderId = downloadsFolderId ?: run { downloadError = "Папка «Завантаження» ще готується"; return }
         scope.launch {
             runCatching {
-                val bytes = context.assets.open("browser/$assetName").use { it.readBytes() }
+                val bytes = withContext(Dispatchers.IO) {
+                    context.assets.open("browser/$assetName").use { it.readBytes() }
+                }
                 val name = nextBrowserDownloadName(assetName, repository.children(folderId))
                 repository.createText(name, folderId, bytes.toString(Charsets.UTF_8))
             }.onFailure { downloadError = "Не вдалося завантажити казку" }
@@ -407,10 +430,18 @@ fun WindowsLearningDesktopApp(
                         }
                     }
                 }
-                webView = this
-                loadAddress("home.local")
+                // Do not mutate Compose state while AndroidView is being measured. On some
+                // older WebView implementations that could leave the address bar unlaid out
+                // until the first navigation.
+                loadUrl("file:///android_asset/browser/home.html")
             } },
-            update = { webView = it },
+            update = { view -> if (webView !== view) webView = view },
+            onRelease = { view ->
+                view.stopLoading()
+                view.loadUrl("about:blank")
+                view.clearHistory()
+                view.destroy()
+            },
         )
     }
 }
@@ -964,7 +995,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     LaunchedEffect(file?.id) {
         if (file != null) {
             val audioFile = File(context.cacheDir, "learning-${file.id}.mp3")
-            audioFile.writeBytes(repository.readPaint(file.id))
+            withContext(Dispatchers.IO) { audioFile.writeBytes(repository.readPaint(file.id)) }
             player = MediaPlayer().apply {
                 setAudioAttributes(android.media.AudioAttributes.Builder().setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
                 setVolume(volume, volume)
@@ -1011,15 +1042,22 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 }
 
 @Composable private fun PhotoScreen(repository: LearningFileRepository, file: FileNode?, onClose: () -> Unit) {
-    var bytes by remember(file?.id) { mutableStateOf<ByteArray?>(null) }
-    LaunchedEffect(file?.id) { if (file != null) bytes = repository.readPaint(file.id) }
+    var bitmap by remember(file?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(file?.id) {
+        if (file != null) {
+            val bytes = repository.readPaint(file.id)
+            bitmap = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+        }
+    }
+    val bitmapToDispose = bitmap
+    DisposableEffect(bitmapToDispose) { onDispose { bitmapToDispose?.recycle() } }
     BackHandler(onBack = onClose)
     Column(Modifier.fillMaxSize().background(Color(0xFF202020))) {
         WindowTitle(file?.name ?: "Фото", onClose)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            bytes?.let { data -> BitmapFactory.decodeByteArray(data, 0, data.size)?.let { bitmap ->
-                Image(bitmap.asImageBitmap(), file?.name ?: "Фото", Modifier.fillMaxSize().padding(16.dp), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
-            } } ?: CircularProgressIndicator(color = Color.White)
+            bitmap?.let { image ->
+                Image(image.asImageBitmap(), file?.name ?: "Фото", Modifier.fillMaxSize().padding(16.dp), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+            } ?: CircularProgressIndicator(color = Color.White)
         }
     }
 }

@@ -28,6 +28,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
@@ -49,6 +51,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileNode
 import ua.school.windowsdesktop.domain.FileOperations
@@ -98,6 +102,7 @@ fun PaintScreen(
     var textPosition by remember { mutableStateOf<Offset?>(null) }
     var enteredText by remember { mutableStateOf("") }
     var activeCurve by remember { mutableStateOf<PaintAction?>(null) }
+    var activeAction by remember { mutableStateOf<PaintAction?>(null) }
     var curveStage by remember { mutableIntStateOf(0) }
     var shape by remember { mutableStateOf(PaintShape.TRIANGLE) }
     var shapeMenu by remember { mutableStateOf(false) }
@@ -112,33 +117,43 @@ fun PaintScreen(
     LaunchedEffect(file?.id) {
         if (file != null) try {
             val bytes = repository.readPaint(file.id)
-            baseBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val decoded = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+            baseBitmap = decoded
             loaded = true
         } catch (failure: Exception) {
             onError(failure.message ?: "Не вдалося відкрити малюнок")
             onClose()
         }
     }
+    val bitmapToDispose = baseBitmap
+    DisposableEffect(bitmapToDispose) { onDispose { bitmapToDispose?.recycle() } }
 
-    fun png(): ByteArray = renderPng(canvasSize, baseBitmap, actions)
     fun save(after: () -> Unit = {}) {
         if (canvasSize.width <= 0 || canvasSize.height <= 0) return
-        val bytes = png()
         scope.launch { try {
+            val size = canvasSize
+            val savedBase = baseBitmap
+            val savedActions = actions
+            val bytes = withContext(Dispatchers.Default) { renderPng(size, savedBase, savedActions) }
             val saved = currentId?.let { repository.writePaint(it, bytes) }
                 ?: repository.createPaint(currentName, file?.parentId ?: FileOperations.ROOT_ID, bytes)
             currentId = saved.id; currentName = saved.name
-            baseBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val decoded = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+            baseBitmap = decoded
             selectedActionIndex = null; actions = emptyList(); redoActions = emptyList(); dirty = false; after()
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося зберегти малюнок") } }
     }
     fun submitSaveAs() {
         if (saveAsName.isBlank() || canvasSize == IntSize.Zero) return
-        val bytes = png()
         scope.launch { try {
+            val size = canvasSize
+            val savedBase = baseBitmap
+            val savedActions = actions
+            val bytes = withContext(Dispatchers.Default) { renderPng(size, savedBase, savedActions) }
             val saved = repository.createPaint(saveAsName, file?.parentId ?: FileOperations.ROOT_ID, bytes)
             currentId = saved.id; currentName = saved.name
-            baseBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val decoded = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+            baseBitmap = decoded
             selectedActionIndex = null; actions = emptyList(); redoActions = emptyList(); dirty = false; saveAsRequested = false
         } catch (failure: Exception) { onError(failure.message ?: "Не вдалося зберегти малюнок") } }
     }
@@ -205,7 +220,13 @@ fun PaintScreen(
                 }
                 if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else {
-                val previewBitmap = remember(canvasSize, baseBitmap, actions, activeCurve) { if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions, activeCurve) else null }
+                // The completed drawing is rasterized only when its history changes. The active
+                // stroke is drawn directly below, which avoids allocating a full-screen bitmap
+                // for every pointer event on low-memory tablets.
+                val previewBitmap = remember(canvasSize, baseBitmap, actions) {
+                    if (canvasSize.width > 0 && canvasSize.height > 0) renderBitmap(canvasSize, baseBitmap, actions) else null
+                }
+                DisposableEffect(previewBitmap) { onDispose { previewBitmap?.recycle() } }
                 val selectedBounds = selectedActionIndex?.let { actions.getOrNull(it)?.let(::actionBounds) }
                 Canvas(Modifier.fillMaxSize().padding(10.dp).background(Color.White).border(1.dp, Color.Gray)
                 .onSizeChanged { canvasSize = it }
@@ -295,7 +316,7 @@ fun PaintScreen(
                         val width = when (gestureTool) { PaintTool.ERASER -> selectedWidth * 4; PaintTool.BRUSH -> selectedWidth * 2; else -> selectedWidth }
                         val isShape = gestureTool in listOf(PaintTool.LINE, PaintTool.RECTANGLE, PaintTool.OVAL, PaintTool.SHAPE)
                         var drawing = PaintAction(gestureTool, listOf(down.position, down.position), color, width, shape = if (gestureTool == PaintTool.SHAPE) shape else null)
-                        actions = before + drawing
+                        activeAction = drawing
                         var completed = false
                         try {
                             do {
@@ -307,21 +328,25 @@ fun PaintScreen(
                                     else -> change.position
                                 }
                                 drawing = drawing.copy(points = if (isShape) listOf(down.position, end) else drawing.points + end)
-                                actions = before + drawing
+                                activeAction = drawing
                                 change.consume()
                                 completed = !change.pressed
                             } while (!completed)
                             if (completed) {
+                                actions = before + drawing
                                 redoActions = emptyList(); dirty = true
                                 selectedActionIndex = if (isShape) actions.lastIndex else null
                             }
                         } finally {
                             if (!completed) actions = before
+                            activeAction = null
                         }
                     }
                 }
         ) {
             previewBitmap?.let { drawImage(it.asImageBitmap(), dstSize = canvasSize) }
+            activeAction?.let { action -> drawIntoCanvas { drawPaintAction(it.nativeCanvas, null, action) } }
+            activeCurve?.let { action -> drawIntoCanvas { drawPaintAction(it.nativeCanvas, null, action) } }
             selectedActionIndex?.let { index ->
                 actions.getOrNull(index)?.let { action ->
                     actionBounds(action)?.let { bounds ->
@@ -390,39 +415,44 @@ private fun ToolButton(icon: Int, label: String, selected: Boolean, action: () -
 
 private fun renderPng(size: IntSize, base: Bitmap?, actions: List<PaintAction>): ByteArray {
     val bitmap = renderBitmap(size, base, actions)
-    return ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
+    return try {
+        ByteArrayOutputStream().use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
+    } finally {
+        bitmap.recycle()
+    }
 }
 
-private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction>, activeCurve: PaintAction? = null): Bitmap {
+private fun renderBitmap(size: IntSize, base: Bitmap?, actions: List<PaintAction>): Bitmap {
     val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
     val canvas = AndroidCanvas(bitmap); canvas.drawColor(AndroidColor.WHITE)
     base?.let { canvas.drawBitmap(it, null, Rect(0, 0, size.width, size.height), null) }
-    (actions + listOfNotNull(activeCurve)).forEach { action ->
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = action.color; strokeWidth = action.width; strokeCap = Paint.Cap.ROUND; style = Paint.Style.STROKE }
-        val start = action.points.firstOrNull() ?: return@forEach
-        val end = action.points.lastOrNull() ?: return@forEach
-        when (action.tool) {
-            PaintTool.PENCIL, PaintTool.BRUSH, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
-            PaintTool.FILL -> floodFill(bitmap, start.x.toInt(), start.y.toInt(), action.color)
-            PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
-            PaintTool.CURVE -> if (action.points.size >= 4) {
-                val path = Path().apply { moveTo(start.x, start.y); cubicTo(action.points[1].x, action.points[1].y, action.points[2].x, action.points[2].y, action.points[3].x, action.points[3].y) }
-                canvas.drawPath(path, paint)
-            }
-            PaintTool.RECTANGLE -> canvas.drawRect(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
-            PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
-            PaintTool.SHAPE -> action.shape?.let { canvas.drawPath(shapePath(it, start, end), paint) }
-            PaintTool.TEXT -> {
-                paint.style = Paint.Style.FILL; paint.textSize = (action.width * 5).coerceAtLeast(18f)
-                canvas.save()
-                canvas.translate(start.x, start.y)
-                canvas.scale(action.scaleX, action.scaleY)
-                canvas.drawText(action.text, 0f, 0f, paint)
-                canvas.restore()
-            }
+    actions.forEach { action -> drawPaintAction(canvas, bitmap, action) }
+    return bitmap
+}
+
+private fun drawPaintAction(canvas: AndroidCanvas, bitmap: Bitmap?, action: PaintAction) {
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = action.color; strokeWidth = action.width; strokeCap = Paint.Cap.ROUND; style = Paint.Style.STROKE
+    }
+    val start = action.points.firstOrNull() ?: return
+    val end = action.points.lastOrNull() ?: return
+    when (action.tool) {
+        PaintTool.PENCIL, PaintTool.BRUSH, PaintTool.ERASER -> action.points.zipWithNext().forEach { (a, b) -> canvas.drawLine(a.x, a.y, b.x, b.y, paint) }
+        PaintTool.FILL -> bitmap?.let { floodFill(it, start.x.toInt(), start.y.toInt(), action.color) }
+        PaintTool.LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
+        PaintTool.CURVE -> if (action.points.size >= 4) {
+            val path = Path().apply { moveTo(start.x, start.y); cubicTo(action.points[1].x, action.points[1].y, action.points[2].x, action.points[2].y, action.points[3].x, action.points[3].y) }
+            canvas.drawPath(path, paint)
+        }
+        PaintTool.RECTANGLE -> canvas.drawRect(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
+        PaintTool.OVAL -> canvas.drawOval(RectF(minOf(start.x, end.x), minOf(start.y, end.y), maxOf(start.x, end.x), maxOf(start.y, end.y)), paint)
+        PaintTool.SHAPE -> action.shape?.let { canvas.drawPath(shapePath(it, start, end), paint) }
+        PaintTool.TEXT -> {
+            paint.style = Paint.Style.FILL; paint.textSize = (action.width * 5).coerceAtLeast(18f)
+            canvas.save(); canvas.translate(start.x, start.y); canvas.scale(action.scaleX, action.scaleY)
+            canvas.drawText(action.text, 0f, 0f, paint); canvas.restore()
         }
     }
-    return bitmap
 }
 
 private fun shapeLabel(shape: PaintShape): String = shape.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }

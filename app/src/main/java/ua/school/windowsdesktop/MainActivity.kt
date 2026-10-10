@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PerformanceMonitor.start(this)
         if (BuildConfig.DEBUG) {
             CrashReporter.install(applicationContext)
             crashReport = CrashReporter.read(applicationContext)
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        PerformanceMonitor.stop(this)
         val opened = repository
         repository = null
         if (opened != null) runBlocking { opened.close() }
