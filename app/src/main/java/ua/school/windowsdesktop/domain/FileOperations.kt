@@ -65,6 +65,17 @@ class FileOperations(
         return publishNode(original.copy(name = name, modifiedAt = clock()))
     }
 
+    /** Move and optionally rename one live node without changing its identity or content. */
+    @Synchronized fun move(id: String, parentId: String, newName: String): FileNode {
+        protectRoot(id)
+        val original = liveNode(id)
+        liveFolder(parentId)
+        if (original.kind == FileKind.FOLDER && isWithin(parentId, original.id)) fail(FileError.COPY_INTO_SELF)
+        val name = FileNames.prepare(newName, original.kind)
+        ensureAvailable(parentId, name, exceptId = if (parentId == original.parentId) id else null)
+        return publishNode(original.copy(parentId = parentId, name = name, modifiedAt = clock()))
+    }
+
     @Synchronized fun copy(id: String) {
         protectRoot(id)
         liveNode(id)

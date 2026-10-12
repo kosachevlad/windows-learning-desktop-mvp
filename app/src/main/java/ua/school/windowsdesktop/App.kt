@@ -840,6 +840,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 
 @Composable private fun WordEditorScreen(repository: LearningFileRepository, file: FileNode?, nodes: Collection<FileNode>, onHome: () -> Unit, onClose: () -> Unit, onError: (String) -> Unit, showFileExtensions: Boolean) {
     val scope = rememberCoroutineScope()
+    var currentFileId by remember(file?.id) { mutableStateOf(file?.id) }
+    var currentName by remember(file?.id) { mutableStateOf(file?.name ?: "Новий документ.docx") }
     var text by remember(file?.id) { mutableStateOf("") }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var saved by remember(file?.id) { mutableStateOf("") }
@@ -855,7 +857,36 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var wordTab by remember { mutableStateOf("Основне") }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
-    fun save(after: () -> Unit = {}) { scope.launch { runCatching { if (file == null) repository.createText("Новий документ.docx", FileOperations.ROOT_ID, text) else repository.writeText(file.id, text); saved = text; after() }.onFailure { onError(errorMessage(it)) } } }
+    var saveRequested by remember { mutableStateOf(false) }
+    var closeAfterSave by remember { mutableStateOf(false) }
+    var saveName by remember(file?.id) { mutableStateOf(currentName) }
+    var saveFolderId by remember(file?.id) { mutableStateOf(FileOperations.ROOT_ID) }
+    val liveFolders = nodes.filter { it.kind == FileKind.FOLDER && it.trashedAt == null }
+    fun requestSave(closeAfter: Boolean = false) {
+        val currentFolder = currentFileId?.let { id -> nodes.firstOrNull { it.id == id }?.parentId }
+        val documentsFolder = liveFolders.firstOrNull { it.parentId == FileOperations.ROOT_ID && it.name == "Документи" }?.id
+        saveFolderId = currentFolder ?: documentsFolder ?: FileOperations.ROOT_ID
+        saveName = currentName
+        closeAfterSave = closeAfter
+        saveRequested = true
+    }
+    fun saveToSelectedFolder() {
+        if (saveName.isBlank()) return
+        scope.launch { runCatching {
+            val existingId = currentFileId
+            val savedNode = if (existingId == null) {
+                repository.createText(saveName, saveFolderId, text)
+            } else {
+                repository.move(existingId, saveFolderId, saveName)
+                repository.writeText(existingId, text)
+            }
+            currentFileId = savedNode.id
+            currentName = savedNode.name
+            saved = text
+            saveRequested = false
+            if (closeAfterSave) onClose()
+        }.onFailure { onError(errorMessage(it)) } }
+    }
     fun requestClose() { if (text != saved) closeRequested = true else onClose() }
     BackHandler(onBack = ::requestClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
@@ -872,7 +903,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             IconButton(onClick = ::requestClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = ::save) { Text("Зберегти") }
+            TextButton(onClick = { requestSave() }, enabled = loaded) { Text("Зберегти") }
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.BOLD)) } }) { Text("Ж", fontWeight = FontWeight.Bold) }
             TextButton(onClick = { activeEditor?.let { applySpanToSelection(it, StyleSpan(Typeface.ITALIC)) } }) { Text("К", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
             TextButton(onClick = { activeEditor?.let { toggleUnderlineSelection(it) } }) { Text("П", textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline) }
@@ -937,9 +968,40 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         onDismissRequest = { closeRequested = false },
         title = { Text("Зберегти зміни?") },
         text = { Text("Документ було змінено. Зберегти його перед виходом?") },
-        confirmButton = { TextButton(onClick = { closeRequested = false; save(onClose) }) { Text("Зберегти") } },
+        confirmButton = { TextButton(onClick = { closeRequested = false; requestSave(closeAfter = true) }) { Text("Зберегти") } },
         dismissButton = { Row { TextButton(onClick = { closeRequested = false; onClose() }) { Text("Не зберігати") }; TextButton(onClick = { closeRequested = false }) { Text("Скасувати") } } },
     )
+    if (saveRequested) {
+        val selectedFolder = liveFolders.firstOrNull { it.id == saveFolderId }
+        val parentFolder = selectedFolder?.parentId
+        val childFolders = liveFolders.filter { it.parentId == saveFolderId }.sortedBy { it.name.lowercase() }
+        AlertDialog(
+            onDismissRequest = { saveRequested = false },
+            title = { Text("Зберегти документ") },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    Text("Папка: ${if (saveFolderId == FileOperations.ROOT_ID) "Мої файли" else selectedFolder?.name.orEmpty()}", fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { saveFolderId = FileOperations.ROOT_ID }) { Text("⌂ Мої файли") }
+                        TextButton(onClick = { parentFolder?.let { saveFolderId = it } }, enabled = parentFolder != null) { Text("↑ Вгору") }
+                    }
+                    Surface(Modifier.fillMaxWidth().heightIn(max = 180.dp), border = BorderStroke(1.dp, Color(0xFFB0B0B0))) {
+                        Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                            if (childFolders.isEmpty()) Text("Немає вкладених папок", color = Color.Gray, modifier = Modifier.padding(12.dp))
+                            childFolders.forEach { folder ->
+                                TextButton(onClick = { saveFolderId = folder.id }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("📁 ${folder.name}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                                }
+                            }
+                        }
+                    }
+                    OutlinedTextField(saveName, { saveName = it }, Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true, label = { Text("Ім'я файлу") })
+                }
+            },
+            confirmButton = { TextButton(onClick = ::saveToSelectedFolder, enabled = saveName.isNotBlank()) { Text("Зберегти") } },
+            dismissButton = { TextButton(onClick = { saveRequested = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 @Composable private fun DropdownMenuBox(value: String, options: List<String>, onSelect: (String) -> Unit) {

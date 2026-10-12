@@ -27,8 +27,10 @@ class FileOperationsTest {
         assertEquals("Привіт 🌍".toByteArray(Charsets.UTF_8).size.toLong(), text.sizeBytes)
         assertEquals(FileKind.PAINT, paint.kind)
         assertEquals(3L, paint.sizeBytes)
+        val word = files.createText("План.docx", folder.id)
+        assertEquals("План.docx", word.name)
         assertEquals(listOf(folder), files.children(root))
-        assertEquals(setOf(text, paint), files.children(folder.id).toSet())
+        assertEquals(setOf(text, paint, word), files.children(folder.id).toSet())
     }
 
     @Test fun rejects_invalid_names_without_changing_tree() {
@@ -68,6 +70,19 @@ class FileOperationsTest {
         files.createText("Інший.txt", root)
         expectError(FileError.NAME_CONFLICT) { files.rename(text.id, "інший.txt") }
         expectError(FileError.INVALID_EXTENSION) { files.rename(text.id, "план.png") }
+    }
+
+    @Test fun move_preserves_file_identity_and_content() {
+        val source = files.createFolder("Джерело", root)
+        val destination = files.createFolder("Призначення", root)
+        val text = files.createText("план.txt", source.id, "Текст")
+        val moved = files.move(text.id, destination.id, "Новий план.txt")
+        assertEquals(text.id, moved.id)
+        assertEquals(destination.id, moved.parentId)
+        assertEquals("Новий план.txt", moved.name)
+        assertEquals("Текст", files.readText(text.id))
+        assertTrue(files.children(source.id).isEmpty())
+        expectError(FileError.COPY_INTO_SELF) { files.move(destination.id, destination.id, "Призначення") }
     }
 
     @Test fun saves_are_immutable_and_refresh_size_and_timestamp() {

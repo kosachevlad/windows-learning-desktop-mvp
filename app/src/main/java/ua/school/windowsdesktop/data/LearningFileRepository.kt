@@ -55,6 +55,7 @@ class LearningFileRepository private constructor(
         return mutate { it.writePaint(id, input) }
     }
     suspend fun rename(id: String, name: String): FileNode = mutate { it.rename(id, name) }
+    suspend fun move(id: String, parentId: String, name: String): FileNode = mutate { it.move(id, parentId, name) }
     suspend fun paste(parentId: String, copyLabel: String = "копія"): FileNode = mutate { it.paste(parentId, copyLabel) }
     suspend fun moveToTrash(id: String): FileNode = mutate { it.moveToTrash(id) }
     suspend fun restore(id: String, newName: String? = null): FileNode = mutate { it.restore(id, newName) }

@@ -14,7 +14,7 @@ internal object FileNames {
         validate(name)
         val extension = when (kind) {
             FileKind.FOLDER -> ""
-            FileKind.TEXT -> ".txt"
+            FileKind.TEXT -> if (name.endsWith(".docx", true)) ".docx" else ".txt"
             FileKind.PAINT -> ".png"
         }
         if (kind == FileKind.PAINT && (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true) || name.endsWith(".mp3", true))) {
