@@ -62,6 +62,7 @@ internal fun DesktopScreen(
     var createPosition by remember { mutableStateOf(Offset.Zero) }
     var newName by remember { mutableStateOf("") }
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedSystemShortcutId by remember { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<FileNode?>(null) }
     var deleteTarget by remember { mutableStateOf<FileNode?>(null) }
     var renameSystemShortcut by remember { mutableStateOf<SystemShortcut?>(null) }
@@ -90,9 +91,9 @@ internal fun DesktopScreen(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0078D7)).onLongPressContext { point ->
-        selectedId = null; backgroundMenu = point
+        selectedId = null; selectedSystemShortcutId = null; backgroundMenu = point
     }.onSecondaryClick { point ->
-        selectedId = null; backgroundMenu = point
+        selectedId = null; selectedSystemShortcutId = null; backgroundMenu = point
     }) {
         val systemShortcutType = stringResource(R.string.system_shortcut)
         val rows = ((maxHeight.value - 12f) / 100f).toInt().coerceAtLeast(1)
@@ -107,6 +108,8 @@ internal fun DesktopScreen(
             val label = systemShortcutNames[shortcut.id] ?: shortcut.defaultName
             SystemDesktopIcon(shortcut.icon, label, 12 + (index / rows) * 104, 12 + (index % rows) * 100,
                 onOpen = shortcut.open,
+                selected = shortcut.id == selectedSystemShortcutId,
+                onSelect = { selectedId = null; selectedSystemShortcutId = shortcut.id },
                 onRename = if (shortcut.isProtected) null else {
                     { renameSystemShortcut = shortcut; newName = label }
                 },
@@ -125,7 +128,7 @@ internal fun DesktopScreen(
         desktopNodes.forEach { node ->
             val position = positions.getValue(node.id)
             UserDesktopIcon(node, position, node.id == selectedId, showFileExtensions,
-                onSelect = { selectedId = node.id }, onOpen = { open(node) },
+                onSelect = { selectedSystemShortcutId = null; selectedId = node.id }, onOpen = { open(node) },
                 onRename = { renameTarget = node; newName = displayName(node, showFileExtensions) },
                 onDelete = { deleteTarget = node },
                 onProperties = { propertiesTarget = DesktopProperties(displayName(node, showFileExtensions), fileTypeName(node)) })
@@ -191,13 +194,14 @@ internal fun DesktopScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun SystemDesktopIcon(
     icon: Int, label: String, x: Int, y: Int, onOpen: () -> Unit, onRename: (() -> Unit)?, onDelete: (() -> Unit)?,
-    onProperties: () -> Unit, onEmptyTrash: (() -> Unit)?,
+    onProperties: () -> Unit, onEmptyTrash: (() -> Unit)?, selected: Boolean, onSelect: () -> Unit,
 ) {
     var menuPosition by remember { mutableStateOf<Offset?>(null) }
     Box(Modifier.offset(x = x.dp, y = y.dp).width(92.dp)
-        .onLongPressContext { menuPosition = it }
-        .onSecondaryClick(PointerEventPass.Initial) { menuPosition = it }) {
-        Column(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onDoubleClick = onOpen).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        .onSecondaryClick(PointerEventPass.Initial) { point -> onSelect(); menuPosition = point }) {
+        Column(Modifier.fillMaxWidth().background(if (selected) Color(0x6633A7FF) else Color.Transparent)
+            .combinedClickable(onClick = onSelect, onDoubleClick = onOpen, onLongClick = { onSelect(); menuPosition = Offset(8f, 8f) })
+            .padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(painterResource(icon), label, Modifier.size(58.dp))
             Text(label, color = Color.White, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -222,9 +226,9 @@ internal fun DesktopScreen(
     var menuPosition by remember { mutableStateOf<Offset?>(null) }
     Box(Modifier.offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }.width(96.dp)
         .background(if (selected) Color(0x6633A7FF) else Color.Transparent)
-        .onLongPressContext { menuPosition = it; onSelect() }
-        .onSecondaryClick(PointerEventPass.Initial) { menuPosition = it; onSelect() }) {
-        Column(Modifier.fillMaxWidth().combinedClickable(onClick = onSelect, onDoubleClick = onOpen).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        .onSecondaryClick(PointerEventPass.Initial) { point -> onSelect(); menuPosition = point }) {
+        Column(Modifier.fillMaxWidth().combinedClickable(onClick = onSelect, onDoubleClick = onOpen,
+            onLongClick = { onSelect(); menuPosition = Offset(8f, 8f) }).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(painterResource(fileIcon(node)), null, Modifier.size(58.dp))
             Text(displayName(node, showExtensions), color = Color.White, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
