@@ -13,6 +13,8 @@
     <string name="open">Відкрити</string><string name="copy">Копіювати</string>
     <string name="paste">Вставити</string><string name="rename">Перейменувати</string>
     <string name="delete">Видалити</string><string name="restore">Відновити</string>
+    <string name="properties">Властивості</string>
+    <string name="system_shortcut">Системний ярлик</string>
     <string name="delete_permanently">Видалити назавжди</string>
     <string name="empty_recycle_bin">Очистити кошик</string>
     <string name="delete_permanently_question">Назавжди видалити «%1$s»? Цю дію не можна скасувати.</string>
