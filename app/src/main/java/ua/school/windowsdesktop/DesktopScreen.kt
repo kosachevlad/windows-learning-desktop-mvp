@@ -39,6 +39,7 @@ internal fun DesktopScreen(
     onBrowser: () -> Unit,
     onFolder: (String) -> Unit,
     onText: (String) -> Unit,
+    onWord: (String) -> Unit,
     onPaintFile: (String) -> Unit,
     onError: (String) -> Unit,
     showFileExtensions: Boolean,
@@ -58,7 +59,7 @@ internal fun DesktopScreen(
 
     fun open(node: FileNode) = when (node.kind) {
         FileKind.FOLDER -> onFolder(node.id)
-        FileKind.TEXT -> onText(node.id)
+        FileKind.TEXT -> if (node.name.endsWith(".docx", true)) onWord(node.id) else onText(node.id)
         FileKind.PAINT -> onPaintFile(node.id)
     }
     fun submitCreate(kind: FileKind) {

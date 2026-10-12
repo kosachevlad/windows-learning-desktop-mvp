@@ -150,6 +150,7 @@ fun WindowsLearningDesktopApp(
                         onBrowser = { open(AppScreen.Browser) },
                         onFolder = { open(AppScreen.Explorer(it)) },
                         onText = { open(AppScreen.Notepad(it)) },
+                        onWord = { open(AppScreen.Word(it)) },
                         onPaintFile = { open(AppScreen.Paint(it)) },
                         onError = { error = it },
                         showFileExtensions = showFileExtensions,
@@ -157,6 +158,7 @@ fun WindowsLearningDesktopApp(
                     )
                     is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, nodes,
                         onFolder = { open(AppScreen.Explorer(it)) }, onText = { open(AppScreen.Notepad(it, returnFolderId = current.folderId)) },
+                        onWord = { open(AppScreen.Word(it, returnFolderId = current.folderId)) },
                         onPaint = { open(AppScreen.Paint(it, returnFolderId = current.folderId)) },
                         onPhoto = { open(AppScreen.Photo(it)) },
                         onMusic = { open(AppScreen.Music(it)) },
@@ -475,7 +477,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 
 @Composable private fun ExplorerScreen(
     repository: LearningFileRepository, folderId: String, nodes: List<FileNode>,
-    onFolder: (String) -> Unit, onText: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit, onMusic: (String) -> Unit,
+    onFolder: (String) -> Unit, onText: (String) -> Unit, onWord: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit, onMusic: (String) -> Unit,
     onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
     showFileExtensions: Boolean,
@@ -495,7 +497,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }.sortedBy { it.name.lowercase() }
     val selected = children.firstOrNull { it.id == selectedId }
     fun openNode(node: FileNode) { when (node.kind) {
-        FileKind.FOLDER -> onFolder(node.id); FileKind.TEXT -> onText(node.id)
+        FileKind.FOLDER -> onFolder(node.id)
+        FileKind.TEXT -> if (node.name.endsWith(".docx", true)) onWord(node.id) else onText(node.id)
         FileKind.PAINT -> when {
             node.name.endsWith(".jpg", true) || node.name.endsWith(".jpeg", true) -> onPhoto(node.id)
             node.name.endsWith(".mp3", true) -> onMusic(node.id)
@@ -854,7 +857,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var activeEditor by remember { mutableStateOf<EditText?>(null) }
     var textColorMenu by remember { mutableStateOf(false) }
     var justifyText by remember { mutableStateOf(false) }
-    var wordTab by remember { mutableStateOf("Основне") }
+    var wordTab by remember(file?.id) { mutableStateOf("Основне") }
     LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
     var saveRequested by remember { mutableStateOf(false) }
@@ -1010,7 +1013,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 }
 
 @Composable private fun WordHomeScreen(nodes: List<FileNode>, onNew: () -> Unit, onOpen: (String) -> Unit) {
-    val documents = nodes.filter { it.kind == FileKind.TEXT && it.trashedAt == null }.sortedByDescending { it.modifiedAt }
+    val documents = nodes.filter { it.kind == FileKind.TEXT && it.name.endsWith(".docx", true) && it.trashedAt == null }.sortedByDescending { it.modifiedAt }
     Row(Modifier.fillMaxSize().background(Color.White)) {
         Column(Modifier.width(175.dp).fillMaxHeight().background(Color(0xFF2F5597))) {
             Text("Word", color = Color.White, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(28.dp, 30.dp))
