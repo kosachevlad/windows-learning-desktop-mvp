@@ -93,12 +93,26 @@ fun WindowsLearningDesktopApp(
     var error by remember { mutableStateOf<String?>(null) }
     var clipboardReady by remember { mutableStateOf(false) }
     var showFileExtensions by remember { mutableStateOf(false) }
+    var showLoader by remember { mutableStateOf(false) }
+    var loaderRequest by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val appScope = rememberCoroutineScope()
     val nodes = remember(snapshot) { snapshot.nodes.values.toList() }
+    fun showLoading() { showLoader = true; loaderRequest++ }
+    LaunchedEffect(loaderRequest) {
+        if (loaderRequest > 0) {
+            delay(220)
+            showLoader = false
+        }
+    }
     fun open(next: AppScreen) {
-        screenRequestedAtMs = android.os.SystemClock.elapsedRealtime()
-        PerformanceMonitor.markScreenRequested(next.javaClass.simpleName)
-        screen = next
+        showLoading()
+        appScope.launch {
+            withFrameNanos { }
+            screenRequestedAtMs = android.os.SystemClock.elapsedRealtime()
+            PerformanceMonitor.markScreenRequested(next.javaClass.simpleName)
+            screen = next
+        }
     }
     LaunchedEffect(screen) {
         withFrameNanos { PerformanceMonitor.markScreenDisplayed(screen.javaClass.simpleName, screenRequestedAtMs) }
@@ -136,6 +150,7 @@ fun WindowsLearningDesktopApp(
         }
     }
     MaterialTheme {
+        Box(Modifier.fillMaxSize()) {
         DesktopViewport {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -154,6 +169,7 @@ fun WindowsLearningDesktopApp(
                         onText = { open(AppScreen.Notepad(it)) },
                         onWord = { open(AppScreen.Word(it)) },
                         onPaintFile = { open(AppScreen.Paint(it)) },
+                        onShowLoading = ::showLoading,
                         onError = { error = it },
                         showFileExtensions = showFileExtensions,
                         trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
@@ -166,6 +182,7 @@ fun WindowsLearningDesktopApp(
                         onMusic = { open(AppScreen.Music(it)) },
                         onDesktop = { open(AppScreen.Desktop) }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
+                        onShowLoading = ::showLoading,
                         showFileExtensions = showFileExtensions)
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
@@ -217,12 +234,15 @@ fun WindowsLearningDesktopApp(
                 onBrowser = { open(AppScreen.Browser) },
                 onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
                 onWord = { open(AppScreen.WordHome) },
+                onShowLoading = ::showLoading,
             )
         }
         }
+        if (showLoader) AppLoadingOverlay()
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
             title = { Text(stringResource(R.string.error_title)) }, text = { Text(message) },
             confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.ok)) } }) }
+        }
     }
 }
 
@@ -236,6 +256,7 @@ fun WindowsLearningDesktopApp(
     onBrowser: () -> Unit,
     onMusic: () -> Unit,
     onWord: () -> Unit,
+    onShowLoading: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
     var startMenu by remember { mutableStateOf(false) }
@@ -252,7 +273,7 @@ fun WindowsLearningDesktopApp(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            IconButton(onClick = { startMenu = !startMenu }) {
+            IconButton(onClick = { onShowLoading(); startMenu = !startMenu }) {
                 Image(painterResource(R.drawable.start_btn), "Пуск", Modifier.size(48.dp))
             }
             DropdownMenu(
@@ -483,6 +504,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     onFolder: (String) -> Unit, onText: (String) -> Unit, onWord: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit, onMusic: (String) -> Unit,
     onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
+    onShowLoading: () -> Unit,
     showFileExtensions: Boolean,
 ) {
     val scope = rememberCoroutineScope()
@@ -581,10 +603,12 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                 .fillMaxWidth()
                 .weight(1f)
                 .onLongPressContext { position ->
+                    onShowLoading()
                     selectedId = null
                     backgroundMenuPosition = position
                 }
                 .onSecondaryClick { position ->
+                    onShowLoading()
                     selectedId = null
                     backgroundMenuPosition = position
                 }
@@ -633,6 +657,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                             selectedId = node.id
                             deleteTarget = node
                         },
+                        onShowLoading = onShowLoading,
                     )
                 }
             }
@@ -725,7 +750,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun FileRow(
     node: FileNode, showFileExtensions: Boolean, selected: Boolean, select: () -> Unit, open: () -> Unit,
-    openWithPaint: (() -> Unit)? = null, copy: () -> Unit, rename: () -> Unit, delete: () -> Unit,
+    openWithPaint: (() -> Unit)? = null, copy: () -> Unit, rename: () -> Unit, delete: () -> Unit, onShowLoading: () -> Unit,
 ) {
     val type = when {
         node.name.endsWith(".mp3", true) -> "Музичний файл"
@@ -738,6 +763,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         Modifier
             .width(760.dp)
             .onSecondaryClick(PointerEventPass.Initial) { position ->
+                onShowLoading()
                 select()
                 menuPosition = position
             }
@@ -749,7 +775,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                 .combinedClickable(
                     onClick = select,
                     onDoubleClick = open,
-                    onLongClick = { select(); menuPosition = Offset(8f, 8f) },
+                    onLongClick = { onShowLoading(); select(); menuPosition = Offset(8f, 8f) },
                 )
                 .padding(vertical = 10.dp)
                 .semantics { contentDescription = displayName(node, showFileExtensions) }
