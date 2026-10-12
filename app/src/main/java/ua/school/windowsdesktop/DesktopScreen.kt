@@ -42,6 +42,7 @@ internal fun DesktopScreen(
     nodes: List<FileNode>,
     onFiles: () -> Unit,
     onComputer: () -> Unit,
+    onComputerProperties: () -> Unit,
     onNotepad: () -> Unit,
     onTrash: () -> Unit,
     onPaint: () -> Unit,
@@ -120,7 +121,9 @@ internal fun DesktopScreen(
                         saveHiddenSystemShortcuts(context, updated)
                     }
                 },
-                onProperties = { propertiesTarget = DesktopProperties(label, systemShortcutType) },
+                onProperties = if (shortcut.id == "this_pc") onComputerProperties else {
+                    { propertiesTarget = DesktopProperties(label, systemShortcutType) }
+                },
                 onEmptyTrash = if (shortcut.isTrash) { { clearTrashRequested = true } } else null,
             )
         }

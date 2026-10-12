@@ -73,6 +73,7 @@ private sealed interface AppScreen {
     data object WordHome : AppScreen
     data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
+    data object ThisPc : AppScreen
     data object SystemInfo : AppScreen
     data object Trash : AppScreen
     data object Browser : AppScreen
@@ -143,7 +144,8 @@ fun WindowsLearningDesktopApp(
                         repository = repository,
                         nodes = nodes,
                         onFiles = { open(AppScreen.Explorer()) },
-                        onComputer = { open(AppScreen.SystemInfo) },
+                        onComputer = { open(AppScreen.ThisPc) },
+                        onComputerProperties = { open(AppScreen.SystemInfo) },
                         onNotepad = { open(AppScreen.Notepad()) },
                         onTrash = { open(AppScreen.Trash) },
                         onPaint = { open(AppScreen.Paint()) },
@@ -181,6 +183,7 @@ fun WindowsLearningDesktopApp(
                     is AppScreen.Paint -> PaintScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
                         onError = { error = it }, showFileExtensions = showFileExtensions)
+                    AppScreen.ThisPc -> ThisPcScreen(onClose = { open(AppScreen.Desktop) })
                     AppScreen.SystemInfo -> SystemInfoScreen(onClose = { open(AppScreen.Desktop) })
                     AppScreen.Trash -> TrashScreen(repository, nodes,
                         onDesktop = { open(AppScreen.Desktop) }, onError = { error = it },
