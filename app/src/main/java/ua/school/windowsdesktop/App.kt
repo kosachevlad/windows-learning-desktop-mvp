@@ -862,25 +862,26 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var closeRequested by remember { mutableStateOf(false) }
     var saveRequested by remember { mutableStateOf(false) }
     var closeAfterSave by remember { mutableStateOf(false) }
-    var saveName by remember(file?.id) { mutableStateOf(currentName) }
+    var saveName by remember(file?.id) { mutableStateOf(wordDocumentBaseName(currentName)) }
     var saveFolderId by remember(file?.id) { mutableStateOf(FileOperations.ROOT_ID) }
     val liveFolders = nodes.filter { it.kind == FileKind.FOLDER && it.trashedAt == null }
     fun requestSave(closeAfter: Boolean = false) {
         val currentFolder = currentFileId?.let { id -> nodes.firstOrNull { it.id == id }?.parentId }
         val documentsFolder = liveFolders.firstOrNull { it.parentId == FileOperations.ROOT_ID && it.name == "Документи" }?.id
         saveFolderId = currentFolder ?: documentsFolder ?: FileOperations.ROOT_ID
-        saveName = currentName
+        saveName = wordDocumentBaseName(currentName)
         closeAfterSave = closeAfter
         saveRequested = true
     }
     fun saveToSelectedFolder() {
         if (saveName.isBlank()) return
         scope.launch { runCatching {
+            val targetName = "${wordDocumentBaseName(saveName)}.docx"
             val existingId = currentFileId
             val savedNode = if (existingId == null) {
-                repository.createText(saveName, saveFolderId, text)
+                repository.createText(targetName, saveFolderId, text)
             } else {
-                repository.move(existingId, saveFolderId, saveName)
+                repository.move(existingId, saveFolderId, targetName)
                 repository.writeText(existingId, text)
             }
             currentFileId = savedNode.id
@@ -977,7 +978,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     if (saveRequested) {
         val selectedFolder = liveFolders.firstOrNull { it.id == saveFolderId }
         val parentFolder = selectedFolder?.parentId
-        val childFolders = liveFolders.filter { it.parentId == saveFolderId }.sortedBy { it.name.lowercase() }
+        val folderChildren = nodes.filter { it.parentId == saveFolderId && it.trashedAt == null }
+            .sortedWith(compareBy<FileNode> { it.kind != FileKind.FOLDER }.thenBy { it.name.lowercase() })
         AlertDialog(
             onDismissRequest = { saveRequested = false },
             title = { Text("Зберегти документ") },
@@ -990,15 +992,22 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                     }
                     Surface(Modifier.fillMaxWidth().heightIn(max = 180.dp), border = BorderStroke(1.dp, Color(0xFFB0B0B0))) {
                         Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                            if (childFolders.isEmpty()) Text("Немає вкладених папок", color = Color.Gray, modifier = Modifier.padding(12.dp))
-                            childFolders.forEach { folder ->
-                                TextButton(onClick = { saveFolderId = folder.id }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("📁 ${folder.name}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                            if (folderChildren.isEmpty()) Text("Папка порожня", color = Color.Gray, modifier = Modifier.padding(12.dp))
+                            folderChildren.forEach { child ->
+                                if (child.kind == FileKind.FOLDER) {
+                                    TextButton(onClick = { saveFolderId = child.id }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("📁 ${child.name}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                                    }
+                                } else {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Image(painterResource(fileIcon(child)), null, Modifier.size(20.dp))
+                                        Text(child.name, Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                             }
                         }
                     }
-                    OutlinedTextField(saveName, { saveName = it }, Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true, label = { Text("Ім'я файлу") })
+                    OutlinedTextField(saveName, { saveName = wordDocumentBaseName(it) }, Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true, label = { Text("Ім'я файлу") })
                 }
             },
             confirmButton = { TextButton(onClick = ::saveToSelectedFolder, enabled = saveName.isNotBlank()) { Text("Зберегти") } },
@@ -1006,6 +1015,9 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         )
     }
 }
+
+private fun wordDocumentBaseName(name: String): String =
+    if (name.endsWith(".docx", ignoreCase = true)) name.dropLast(5) else name
 
 @Composable private fun DropdownMenuBox(value: String, options: List<String>, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
