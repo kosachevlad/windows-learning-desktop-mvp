@@ -1,6 +1,8 @@
 package ua.school.windowsdesktop
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.annotation.SuppressLint
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -64,11 +66,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ua.school.windowsdesktop.data.LearningFileRepository
+import ua.school.windowsdesktop.data.SharedFolderRepository
 import ua.school.windowsdesktop.domain.*
 
 private sealed interface AppScreen {
     data object Desktop : AppScreen
     data class Explorer(val folderId: String = FileOperations.ROOT_ID) : AppScreen
+    data object SharedFolder : AppScreen
     data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object WordHome : AppScreen
     data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
@@ -96,6 +100,11 @@ fun WindowsLearningDesktopApp(
     var showLoader by remember { mutableStateOf(false) }
     var loaderRequest by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val sharedFolder = remember { SharedFolderRepository(context) }
+    var sharedRefresh by remember { mutableIntStateOf(0) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) runCatching { sharedFolder.remember(uri); sharedRefresh++ }.onFailure { error = errorMessage(it) }
+    }
     val appScope = rememberCoroutineScope()
     val nodes = remember(snapshot) { snapshot.nodes.values.toList() }
     fun showLoading() { showLoader = true; loaderRequest++ }
@@ -183,7 +192,8 @@ fun WindowsLearningDesktopApp(
                         onDesktop = { open(AppScreen.Desktop) }, onError = { error = it },
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         onShowLoading = ::showLoading,
-                        showFileExtensions = showFileExtensions)
+                        showFileExtensions = showFileExtensions, onSharedFolder = { open(AppScreen.SharedFolder) })
+                    AppScreen.SharedFolder -> SharedFolderScreen(sharedFolder, sharedRefresh, onPickFolder = { folderPicker.launch(sharedFolder.treeUri) }, onBack = { open(AppScreen.Explorer()) })
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
@@ -506,6 +516,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
     onShowLoading: () -> Unit,
     showFileExtensions: Boolean,
+    onSharedFolder: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var createKind by remember { mutableStateOf<FileKind?>(null) }
@@ -578,6 +589,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             TextButton(onClick = ::paste, enabled = clipboardReady) { Text(stringResource(R.string.paste)) }
             TextButton(onClick = { selected?.let { renameTarget = it; newName = displayName(it, showFileExtensions) } }, enabled = selected != null) { Text(stringResource(R.string.rename)) }
             TextButton(onClick = { selected?.let { deleteTarget = it } }, enabled = selected != null) { Text(stringResource(R.string.delete)) }
+            TextButton(onClick = onSharedFolder) { Text("Спільні файли Android") }
             Spacer(Modifier.weight(1f))
             IconButton(
                 onClick = { createKind = FileKind.FOLDER; newName = "" },
@@ -739,6 +751,36 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             repository.moveToTrash(target.id); selectedId = null; deleteTarget = null
         } catch (failure: Exception) { onError(errorMessage(failure)) } } }) { Text(stringResource(R.string.delete)) } },
         dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.cancel)) } }) }
+}
+
+@Composable private fun SharedFolderScreen(
+    repository: SharedFolderRepository,
+    refreshToken: Int,
+    onPickFolder: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val entries = remember(refreshToken, repository.treeUri) { runCatching { repository.list() }.getOrDefault(emptyList()) }
+    BackHandler(onBack = onBack)
+    Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4))) {
+        WindowTitle("Спільні файли Android", onBack)
+        Row(Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("← Назад") }
+            TextButton(onClick = onPickFolder) { Text(if (repository.treeUri == null) "Вибрати папку" else "Змінити папку") }
+        }
+        if (repository.treeUri == null) {
+            Text("Виберіть папку Android для перегляду файлів.", modifier = Modifier.padding(16.dp))
+        } else if (!repository.hasAccess()) {
+            Text("Доступ до папки втрачено. Виберіть її знову.", modifier = Modifier.padding(16.dp))
+        } else if (entries.isEmpty()) {
+            Text("Папка порожня", modifier = Modifier.padding(16.dp))
+        } else {
+            Column(Modifier.padding(12.dp)) {
+                entries.forEach { entry ->
+                    Text("${if (entry.isDirectory) "📁" else "📄"} ${entry.name}", modifier = Modifier.padding(vertical = 8.dp))
+                }
+            }
+        }
+    }
 }
 
 @Composable private fun FileHeader() = Row(Modifier.width(760.dp).background(Color(0xFFE5E5E5)).padding(vertical = 9.dp)) {
