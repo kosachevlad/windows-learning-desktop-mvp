@@ -60,6 +60,9 @@ class SharedFolderRepository(context: Context) {
         }
     }
 
+    fun readFile(uri: Uri): ByteArray = resolver.openInputStream(uri)?.use { it.readBytes() }
+        ?: error("Не вдалося прочитати файл")
+
     private companion object {
         const val KEY_URI = "tree_uri"
         val PROJECTION = arrayOf(

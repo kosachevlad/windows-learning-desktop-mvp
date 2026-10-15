@@ -193,7 +193,7 @@ fun WindowsLearningDesktopApp(
                         clipboardReady = clipboardReady, onClipboardReady = { clipboardReady = it },
                         onShowLoading = ::showLoading,
                         showFileExtensions = showFileExtensions, onSharedFolder = { open(AppScreen.SharedFolder) })
-                    AppScreen.SharedFolder -> SharedFolderScreen(sharedFolder, sharedRefresh, onPickFolder = { folderPicker.launch(sharedFolder.treeUri) }, onBack = { open(AppScreen.Explorer()) })
+                    AppScreen.SharedFolder -> SharedFolderScreen(repository, sharedFolder, sharedRefresh, onPickFolder = { folderPicker.launch(sharedFolder.treeUri) }, onBack = { open(AppScreen.Explorer()) }, onError = { error = it })
                     is AppScreen.Notepad -> NotepadScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
                         onError = { error = it }, keyboardLanguage = keyboardLanguage,
@@ -769,11 +769,14 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 }
 
 @Composable private fun SharedFolderScreen(
+    learningRepository: LearningFileRepository,
     repository: SharedFolderRepository,
     refreshToken: Int,
     onPickFolder: () -> Unit,
     onBack: () -> Unit,
+    onError: (String) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val entries = remember(refreshToken, repository.treeUri) { runCatching { repository.list() }.getOrDefault(emptyList()) }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Color(0xFFF4F4F4))) {
@@ -791,7 +794,20 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         } else {
             Column(Modifier.padding(12.dp)) {
                 entries.forEach { entry ->
-                    Text("${if (entry.isDirectory) "📁" else "📄"} ${entry.name}", modifier = Modifier.padding(vertical = 8.dp))
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${if (entry.isDirectory) "📁" else "📄"} ${entry.name}", modifier = Modifier.weight(1f))
+                        if (!entry.isDirectory && entry.name.substringAfterLast('.', "").lowercase() in setOf("txt", "png", "jpg", "jpeg", "docx")) {
+                            TextButton(onClick = { scope.launch {
+                                try {
+                                    val bytes = repository.readFile(entry.uri)
+                                    when (entry.name.substringAfterLast('.', "").lowercase()) {
+                                        "txt", "docx" -> learningRepository.createTextBytes(entry.name, FileOperations.ROOT_ID, bytes)
+                                        else -> learningRepository.createPaint(entry.name, FileOperations.ROOT_ID, bytes)
+                                    }
+                                } catch (failure: Exception) { onError(errorMessage(failure)) }
+                            } }) { Text("Імпортувати") }
+                        }
+                    }
                 }
             }
         }
