@@ -875,6 +875,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var currentFileId by remember(file?.id) { mutableStateOf(file?.id) }
     var currentName by remember(file?.id) { mutableStateOf(file?.name ?: "Новий документ.docx") }
     var text by remember(file?.id) { mutableStateOf("") }
+    var styledText by remember(file?.id) { mutableStateOf<CharSequence>("") }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var saved by remember(file?.id) { mutableStateOf("") }
     var font by remember { mutableStateOf("Calibri") }
@@ -887,7 +888,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var textColorMenu by remember { mutableStateOf(false) }
     var justifyText by remember { mutableStateOf(false) }
     var wordTab by remember(file?.id) { mutableStateOf("Основне") }
-    LaunchedEffect(file?.id) { if (file != null) runCatching { DocxFormat.read(repository.readTextBytes(file.id)) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
+    LaunchedEffect(file?.id) { if (file != null) runCatching { DocxFormat.read(repository.readTextBytes(file.id)) }.onSuccess { styledText = it; text = it.toString(); saved = text; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
     var saveRequested by remember { mutableStateOf(false) }
     var closeAfterSave by remember { mutableStateOf(false) }
@@ -953,7 +954,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             IconButton(onClick = { activeEditor?.let { applyAlignmentToParagraph(it, android.text.Layout.Alignment.ALIGN_NORMAL) } }, modifier = Modifier.background(Color.Transparent)) { Icon(painterResource(R.drawable.word_align_left), "За лівим краєм", tint = Color.Unspecified) }
             IconButton(onClick = { activeEditor?.let { applyAlignmentToParagraph(it, android.text.Layout.Alignment.ALIGN_CENTER) } }, modifier = Modifier.background(Color.Transparent)) { Icon(painterResource(R.drawable.word_align_center), "По центру", tint = Color.Unspecified) }
             IconButton(onClick = { activeEditor?.let { applyAlignmentToParagraph(it, android.text.Layout.Alignment.ALIGN_OPPOSITE) } }, modifier = Modifier.background(Color.Transparent)) { Icon(painterResource(R.drawable.word_align_right), "За правим краєм", tint = Color.Unspecified) }
-            IconButton(onClick = { justifyText = true }, modifier = Modifier.background(if (justifyText) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_justify), "За шириною", tint = Color.Unspecified) }
+            IconButton(onClick = { justifyText = true; activeEditor?.let { applyJustifyToParagraph(it) } }, modifier = Modifier.background(if (justifyText) Color(0xFFD9EAF7) else Color.Transparent)) { Icon(painterResource(R.drawable.word_align_justify), "За шириною", tint = Color.Unspecified) }
         }
         val pageChunks = text.split('\n').chunked(35).ifEmpty { listOf(listOf("")) }
         val pageCount = pageChunks.size
@@ -965,6 +966,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                     Surface(Modifier.width(794.dp).height(1123.dp), color = Color.White, shadowElevation = 2.dp, border = BorderStroke(1.dp, Color(0xFFD8D8D8))) {
                         if (loaded) RichTextEditor(
                             value = pageText,
+                            styledValue = if (pageIndex == 0 && styledText.length == pageText.length) styledText else null,
                             onValueChange = { updated ->
                                 val allLines = pageChunks.flatMap { it }.toMutableList()
                                 val start = pageIndex * 35
