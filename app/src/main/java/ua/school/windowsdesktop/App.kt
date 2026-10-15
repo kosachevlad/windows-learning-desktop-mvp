@@ -183,7 +183,7 @@ fun WindowsLearningDesktopApp(
                         showFileExtensions = showFileExtensions,
                         trashNotEmpty = snapshot.nodes.values.any { it.trashedAt != null },
                     )
-                    is AppScreen.Explorer -> ExplorerScreen(repository, current.folderId, nodes,
+                    is AppScreen.Explorer -> ExplorerScreen(repository, sharedFolder, current.folderId, nodes,
                         onFolder = { open(AppScreen.Explorer(it)) }, onText = { open(AppScreen.Notepad(it, returnFolderId = current.folderId)) },
                         onWord = { open(AppScreen.Word(it, returnFolderId = current.folderId)) },
                         onPaint = { open(AppScreen.Paint(it, returnFolderId = current.folderId)) },
@@ -510,7 +510,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
 }
 
 @Composable private fun ExplorerScreen(
-    repository: LearningFileRepository, folderId: String, nodes: List<FileNode>,
+    repository: LearningFileRepository, sharedFolder: SharedFolderRepository, folderId: String, nodes: List<FileNode>,
     onFolder: (String) -> Unit, onText: (String) -> Unit, onWord: (String) -> Unit, onPaint: (String) -> Unit, onPhoto: (String) -> Unit, onMusic: (String) -> Unit,
     onDesktop: () -> Unit, onError: (String) -> Unit,
     clipboardReady: Boolean, onClipboardReady: (Boolean) -> Unit,
@@ -542,6 +542,20 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         }
     } }
     fun openSelected() { selected?.let(::openNode) }
+    fun exportSelected() { selected?.let { node -> scope.launch {
+        try {
+            val bytes = if (node.kind == FileKind.TEXT) repository.readTextBytes(node.id) else repository.readPaint(node.id)
+            val mime = when {
+                node.name.endsWith(".docx", true) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                node.name.endsWith(".txt", true) -> "text/plain"
+                node.name.endsWith(".png", true) -> "image/png"
+                node.name.endsWith(".jpg", true) || node.name.endsWith(".jpeg", true) -> "image/jpeg"
+                node.name.endsWith(".mp3", true) -> "audio/mpeg"
+                else -> "application/octet-stream"
+            }
+            sharedFolder.exportFile(node.name, mime, bytes)
+        } catch (failure: Exception) { onError(errorMessage(failure)) }
+    } } }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
     fun paste() { scope.launch { try { repository.paste(folderId); selectedId = null } catch (failure: Exception) { onError(errorMessage(failure)) } } }
     fun submitCreate(kind: FileKind) { if (newName.isBlank()) return else scope.launch { try {
@@ -585,6 +599,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         Row(Modifier.fillMaxWidth().background(Color.White).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = ::goBack) { Text("← ${stringResource(R.string.back)}") }
             TextButton(onClick = ::openSelected, enabled = selected != null) { Text(stringResource(R.string.open)) }
+            TextButton(onClick = ::exportSelected, enabled = selected != null && sharedFolder.hasAccess()) { Text("Експортувати") }
             TextButton(onClick = ::copySelected, enabled = selected != null) { Text(stringResource(R.string.copy)) }
             TextButton(onClick = ::paste, enabled = clipboardReady) { Text(stringResource(R.string.paste)) }
             TextButton(onClick = { selected?.let { renameTarget = it; newName = displayName(it, showFileExtensions) } }, enabled = selected != null) { Text(stringResource(R.string.rename)) }

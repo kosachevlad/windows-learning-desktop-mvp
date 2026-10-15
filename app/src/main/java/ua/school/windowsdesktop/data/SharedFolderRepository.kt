@@ -46,6 +46,20 @@ class SharedFolderRepository(context: Context) {
         return result
     }
 
+    fun exportFile(name: String, mimeType: String, bytes: ByteArray): Uri {
+        val tree = treeUri ?: error("Спільну папку не вибрано")
+        check(hasAccess()) { "Немає доступу до спільної папки" }
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val created = DocumentsContract.createDocument(resolver, parent, mimeType, name) ?: error("Не вдалося створити файл")
+        try {
+            resolver.openOutputStream(created, "w")?.use { it.write(bytes) } ?: error("Не вдалося відкрити файл")
+            return created
+        } catch (failure: Throwable) {
+            runCatching { DocumentsContract.deleteDocument(resolver, created) }
+            throw failure
+        }
+    }
+
     private companion object {
         const val KEY_URI = "tree_uri"
         val PROJECTION = arrayOf(
