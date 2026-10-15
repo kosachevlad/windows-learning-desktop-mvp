@@ -949,6 +949,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var currentName by remember(file?.id) { mutableStateOf(file?.name ?: "Новий документ.docx") }
     var text by remember(file?.id) { mutableStateOf("") }
     var styledText by remember(file?.id) { mutableStateOf<CharSequence>("") }
+    var originalDocxBytes by remember(file?.id) { mutableStateOf<ByteArray?>(null) }
+    var originalDocxText by remember(file?.id) { mutableStateOf<String?>(null) }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var saved by remember(file?.id) { mutableStateOf("") }
     var font by remember { mutableStateOf("Calibri") }
@@ -961,7 +963,10 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var textColorMenu by remember { mutableStateOf(false) }
     var justifyText by remember { mutableStateOf(false) }
     var wordTab by remember(file?.id) { mutableStateOf("Основне") }
-    LaunchedEffect(file?.id) { if (file != null) runCatching { DocxFormat.read(repository.readTextBytes(file.id)) }.onSuccess { styledText = it; text = it.toString(); saved = text; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
+    LaunchedEffect(file?.id) { if (file != null) runCatching {
+        val bytes = repository.readTextBytes(file.id)
+        bytes to DocxFormat.read(bytes)
+    }.onSuccess { (bytes, content) -> originalDocxBytes = bytes; styledText = content; text = content.toString(); originalDocxText = text; saved = text; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
     var saveRequested by remember { mutableStateOf(false) }
     var closeAfterSave by remember { mutableStateOf(false) }
@@ -985,7 +990,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                 repository.createTextBytes(targetName, saveFolderId, DocxFormat.write(activeEditor?.text ?: text))
             } else {
                 repository.move(existingId, saveFolderId, targetName)
-                repository.writeTextBytes(existingId, DocxFormat.write(activeEditor?.text ?: text))
+                val bytes = if (originalDocxBytes != null && text == originalDocxText) originalDocxBytes!! else DocxFormat.write(activeEditor?.text ?: text)
+                repository.writeTextBytes(existingId, bytes)
             }
             currentFileId = savedNode.id
             currentName = savedNode.name
