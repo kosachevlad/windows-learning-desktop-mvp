@@ -43,16 +43,24 @@ class FileOperations(
     @Synchronized fun createText(name: String, parentId: String, text: String = ""): FileNode =
         create(name, parentId, FileKind.TEXT, FileContent(text.toByteArray(Charsets.UTF_8)))
 
+    @Synchronized fun createTextBytes(name: String, parentId: String, bytes: ByteArray): FileNode =
+        create(name, parentId, FileKind.TEXT, FileContent(bytes.copyOf()))
+
     /** PNG encoding/decoding belongs to Paint and the data layer; the domain stores opaque bytes. */
     @Synchronized fun createPaint(name: String, parentId: String, png: ByteArray): FileNode =
         create(name, parentId, FileKind.PAINT, FileContent(png))
 
     @Synchronized fun readText(id: String): String = content(id, FileKind.TEXT).utf8()
 
+    @Synchronized fun readTextBytes(id: String): ByteArray = content(id, FileKind.TEXT).bytes()
+
     @Synchronized fun readPaint(id: String): ByteArray = content(id, FileKind.PAINT).bytes()
 
     @Synchronized fun writeText(id: String, text: String): FileNode =
         write(id, FileKind.TEXT, FileContent(text.toByteArray(Charsets.UTF_8)))
+
+    @Synchronized fun writeTextBytes(id: String, bytes: ByteArray): FileNode =
+        write(id, FileKind.TEXT, FileContent(bytes.copyOf()))
 
     @Synchronized fun writePaint(id: String, png: ByteArray): FileNode =
         write(id, FileKind.PAINT, FileContent(png))

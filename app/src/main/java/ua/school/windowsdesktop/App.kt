@@ -887,7 +887,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var textColorMenu by remember { mutableStateOf(false) }
     var justifyText by remember { mutableStateOf(false) }
     var wordTab by remember(file?.id) { mutableStateOf("Основне") }
-    LaunchedEffect(file?.id) { if (file != null) runCatching { repository.readText(file.id) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
+    LaunchedEffect(file?.id) { if (file != null) runCatching { DocxFormat.read(repository.readTextBytes(file.id)) }.onSuccess { text = it; saved = it; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
     var saveRequested by remember { mutableStateOf(false) }
     var closeAfterSave by remember { mutableStateOf(false) }
@@ -908,10 +908,10 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             val targetName = "${wordDocumentBaseName(saveName)}.docx"
             val existingId = currentFileId
             val savedNode = if (existingId == null) {
-                repository.createText(targetName, saveFolderId, text)
+                repository.createTextBytes(targetName, saveFolderId, DocxFormat.write(activeEditor?.text ?: text))
             } else {
                 repository.move(existingId, saveFolderId, targetName)
-                repository.writeText(existingId, text)
+                repository.writeTextBytes(existingId, DocxFormat.write(activeEditor?.text ?: text))
             }
             currentFileId = savedNode.id
             currentName = savedNode.name

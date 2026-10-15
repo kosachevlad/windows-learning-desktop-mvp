@@ -38,6 +38,7 @@ class LearningFileRepository private constructor(
     suspend fun children(parentId: String): List<FileNode> = access { it.children(parentId) }
     suspend fun trash(): List<FileNode> = access { it.trash() }
     suspend fun readText(id: String): String = access { it.readText(id) }
+    suspend fun readTextBytes(id: String): ByteArray = access { it.readTextBytes(id) }
     suspend fun readPaint(id: String): ByteArray = access { it.readPaint(id) }
     suspend fun copy(id: String) = access { it.copy(id) }
     suspend fun clearClipboard() = access { it.clearClipboard() }
@@ -45,11 +46,14 @@ class LearningFileRepository private constructor(
     suspend fun createFolder(name: String, parentId: String): FileNode = mutate { it.createFolder(name, parentId) }
     suspend fun createText(name: String, parentId: String, text: String = ""): FileNode =
         mutate { it.createText(name, parentId, text) }
+    suspend fun createTextBytes(name: String, parentId: String, bytes: ByteArray): FileNode =
+        mutate { it.createTextBytes(name, parentId, bytes) }
     suspend fun createPaint(name: String, parentId: String, png: ByteArray): FileNode {
         val input = png.copyOf()
         return mutate { it.createPaint(name, parentId, input) }
     }
     suspend fun writeText(id: String, text: String): FileNode = mutate { it.writeText(id, text) }
+    suspend fun writeTextBytes(id: String, bytes: ByteArray): FileNode = mutate { it.writeTextBytes(id, bytes) }
     suspend fun writePaint(id: String, png: ByteArray): FileNode {
         val input = png.copyOf()
         return mutate { it.writePaint(id, input) }
