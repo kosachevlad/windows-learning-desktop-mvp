@@ -1262,6 +1262,7 @@ private fun wordDocumentBaseName(name: String): String =
     var loaded by remember(file?.id) { mutableStateOf(file == null) }; var closeRequested by remember { mutableStateOf(false) }
     var saveAsRequested by remember { mutableStateOf(false) }
     var saveAsName by remember { mutableStateOf("") }
+    var noteFontSize by remember { mutableStateOf(16.sp) }
     val parentId = file?.parentId ?: FileOperations.ROOT_ID
     val dirty = loaded && text != saved
     LaunchedEffect(file?.id) { if (file != null) try { repository.readText(file.id).let { text = it; saved = it; loaded = true } } catch (failure: Exception) { onError(errorMessage(failure)); onClose() } }
@@ -1294,6 +1295,10 @@ private fun wordDocumentBaseName(name: String): String =
         Row(Modifier.fillMaxWidth().background(Color(0xFFF3F3F3)).padding(horizontal = 8.dp)) {
             TextButton(onClick = { save() }, enabled = loaded && dirty) { Text(stringResource(R.string.save)) }
             TextButton(onClick = ::requestSaveAs, enabled = loaded) { Text(stringResource(R.string.save_as)) }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { noteFontSize = (noteFontSize.value - 1f).coerceAtLeast(8f).sp }) { Text("A−") }
+            Text("${noteFontSize.value.toInt()}", modifier = Modifier.padding(horizontal = 4.dp).align(Alignment.CenterVertically))
+            TextButton(onClick = { noteFontSize = (noteFontSize.value + 1f).coerceAtMost(72f).sp }) { Text("A+") }
         }
         if (!loaded) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else OutlinedTextField(
@@ -1310,7 +1315,7 @@ private fun wordDocumentBaseName(name: String): String =
                 text = updated
             },
             Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" },
-            textStyle = MaterialTheme.typography.bodyLarge,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = noteFontSize),
         )
     }
     if (closeRequested) AlertDialog(onDismissRequest = { closeRequested = false }, title = { Text(stringResource(R.string.save_changes_question)) },
