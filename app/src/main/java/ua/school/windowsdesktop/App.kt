@@ -1315,7 +1315,10 @@ private fun wordDocumentBaseName(name: String): String =
                 text = updated
             },
             Modifier.fillMaxSize().padding(8.dp).semantics { contentDescription = "Редактор тексту" },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = noteFontSize),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = noteFontSize,
+                lineHeight = (noteFontSize.value * 1.2f).sp,
+            ),
         )
     }
     if (closeRequested) AlertDialog(onDismissRequest = { closeRequested = false }, title = { Text(stringResource(R.string.save_changes_question)) },
