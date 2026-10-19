@@ -370,6 +370,7 @@ fun WindowsLearningDesktopApp(
             "weather.local" -> "weather.html"
             "search.local" -> "search.html"
             "gallery.local" -> "gallery.html"
+            "nature.local" -> "nature.html"
             "tales.local" -> "tales.html"
             else -> null
         }
@@ -483,6 +484,9 @@ fun WindowsLearningDesktopApp(
 }
 
 private fun browserDownloadName(assetName: String): String? = when (assetName) {
+    "nature-carpathians.jpg" -> "Українські Карпати.jpg"
+    "nature-dnipro.jpg" -> "Дніпро.jpg"
+    "nature-sunflowers.jpg" -> "Соняшникові поля.jpg"
     "image1.png" -> "Україна.png"
     "image2.png" -> "Україна єдина.png"
     "image3.png" -> "Все буде Україна.png"
