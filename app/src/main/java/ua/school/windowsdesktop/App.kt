@@ -359,6 +359,7 @@ fun WindowsLearningDesktopApp(
     var address by remember { mutableStateOf("home.local") }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var downloadError by remember { mutableStateOf<String?>(null) }
+    var activeDownload by remember { mutableStateOf<BrowserDownloadProgress?>(null) }
     fun loadAddress(value: String) {
         val host = value.trim().lowercase().removePrefix("https://").removePrefix("http://").trimEnd('/')
         address = host
@@ -377,32 +378,47 @@ fun WindowsLearningDesktopApp(
         if (page == null) webView?.loadDataWithBaseURL(null, "<html><body style='font-family:sans-serif;padding:32px'><h1>Сторінку не знайдено</h1><p>Адреса <b>$host</b> не існує в офлайн-браузері.</p></body></html>", "text/html", "UTF-8", null)
         else webView?.loadUrl("file:///android_asset/browser/$page")
     }
+    fun beginBrowserDownload(fileName: String, saveFile: suspend () -> Unit) {
+        if (activeDownload != null) {
+            downloadError = "Дочекайтеся завершення поточного завантаження"
+            return
+        }
+        downloadError = null
+        val durationMs = 1200L + (fileName.hashCode().and(0x7fffffff) % 801)
+        activeDownload = BrowserDownloadProgress(fileName, 0f)
+        scope.launch {
+            runCatching {
+                repeat(20) { step ->
+                    delay(durationMs / 20)
+                    activeDownload = BrowserDownloadProgress(fileName, (step + 1) / 20f)
+                }
+                saveFile()
+            }.onFailure { downloadError = "Не вдалося завантажити файл" }
+            activeDownload = null
+        }
+    }
     fun downloadImage(assetName: String) {
         val folderId = downloadsFolderId ?: run {
             downloadError = "Папка «Завантаження» ще готується"
             return
         }
         val fileName = browserDownloadName(assetName) ?: return
-        scope.launch {
-            runCatching {
+        beginBrowserDownload(fileName) {
                 val bytes = withContext(Dispatchers.IO) {
                     context.assets.open("browser/images/$assetName").use { it.readBytes() }
                 }
                 val name = nextBrowserDownloadName(fileName, repository.children(folderId))
                 repository.createPaint(name, folderId, bytes)
-            }.onFailure { downloadError = "Не вдалося завантажити зображення" }
         }
     }
     fun downloadTale(assetName: String) {
         val folderId = downloadsFolderId ?: run { downloadError = "Папка «Завантаження» ще готується"; return }
-        scope.launch {
-            runCatching {
+        beginBrowserDownload(assetName) {
                 val bytes = withContext(Dispatchers.IO) {
                     context.assets.open("browser/$assetName").use { it.readBytes() }
                 }
                 val name = nextBrowserDownloadName(assetName, repository.children(folderId))
                 repository.createText(name, folderId, bytes.toString(Charsets.UTF_8))
-            }.onFailure { downloadError = "Не вдалося завантажити казку" }
         }
     }
     BackHandler(enabled = webView?.canGoBack() == true) { webView?.goBack() }
@@ -417,13 +433,22 @@ fun WindowsLearningDesktopApp(
                 label = { Text("Адрес") }, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { loadAddress(address) }))
             var downloadsMenu by remember { mutableStateOf(false) }
-            if (downloads.isNotEmpty()) {
+            if (downloads.isNotEmpty() || activeDownload != null) {
                 Box {
                     IconButton(
                         onClick = { downloadsMenu = !downloadsMenu },
                         modifier = Modifier.semantics { contentDescription = "Завантаження" },
                     ) { Text("⇩", style = MaterialTheme.typography.titleLarge) }
                     DropdownMenu(expanded = downloadsMenu, onDismissRequest = { downloadsMenu = false }) {
+                        activeDownload?.let { pending ->
+                            Column(Modifier.width(250.dp).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text("Завантажується: ${pending.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Spacer(Modifier.height(6.dp))
+                                DownloadProgressBar(pending.progress)
+                                Text("${(pending.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp))
+                            }
+                            HorizontalDivider()
+                        }
                         downloads.forEach { download ->
                             DropdownMenuItem(text = { Text(download.name) }, onClick = {
                                 downloadsMenu = false
@@ -442,6 +467,13 @@ fun WindowsLearningDesktopApp(
                     DropdownMenuItem(text = { Text("Завантаження") }, onClick = { browserMenu = false; onOpenDownloads() })
                     DropdownMenuItem(text = { Text("Налаштування") }, onClick = { browserMenu = false })
                 }
+            }
+        }
+        activeDownload?.let { pending ->
+            Column(Modifier.fillMaxWidth().background(Color(0xFFF3F8FC)).padding(horizontal = 12.dp, vertical = 7.dp)) {
+                Text("Завантаження: ${pending.name} — ${(pending.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(5.dp))
+                DownloadProgressBar(pending.progress)
             }
         }
         downloadError?.let { Text(it, color = Color(0xFFB00020), modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) }
@@ -480,6 +512,15 @@ fun WindowsLearningDesktopApp(
                 view.destroy()
             },
         )
+    }
+}
+
+private data class BrowserDownloadProgress(val name: String, val progress: Float)
+
+@Composable
+private fun DownloadProgressBar(progress: Float) {
+    Box(Modifier.fillMaxWidth().height(5.dp).background(Color(0xFFCCD6DF))) {
+        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(Color(0xFF1688D4)))
     }
 }
 
