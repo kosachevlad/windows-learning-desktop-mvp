@@ -998,6 +998,8 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     var originalDocxText by remember(file?.id) { mutableStateOf<String?>(null) }
     var loaded by remember(file?.id) { mutableStateOf(file == null) }
     var saved by remember(file?.id) { mutableStateOf("") }
+    var textHistory by remember(file?.id) { mutableStateOf(listOf("")) }
+    var historyIndex by remember(file?.id) { mutableIntStateOf(0) }
     var font by remember { mutableStateOf("Calibri") }
     var size by remember { mutableStateOf("11") }
     var bold by remember { mutableStateOf(false) }
@@ -1011,7 +1013,11 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     LaunchedEffect(file?.id) { if (file != null) runCatching {
         val bytes = repository.readTextBytes(file.id)
         bytes to DocxFormat.read(bytes)
-    }.onSuccess { (bytes, content) -> originalDocxBytes = bytes; styledText = content; text = content.toString(); originalDocxText = text; saved = text; loaded = true }.onFailure { onError(errorMessage(it)); onClose() } }
+    }.onSuccess { (bytes, content) ->
+        val contentText = content.toString()
+        originalDocxBytes = bytes; styledText = content; text = contentText; originalDocxText = contentText; saved = contentText
+        textHistory = listOf(contentText); historyIndex = 0; loaded = true
+    }.onFailure { onError(errorMessage(it)); onClose() } }
     var closeRequested by remember { mutableStateOf(false) }
     var saveRequested by remember { mutableStateOf(false) }
     var closeAfterSave by remember { mutableStateOf(false) }
@@ -1046,9 +1052,36 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         }.onFailure { onError(errorMessage(it)) } }
     }
     fun requestClose() { if (text != saved) closeRequested = true else onClose() }
+    fun recordTextChange(updatedText: String) {
+        text = updatedText
+        if (textHistory.getOrNull(historyIndex) == updatedText) return
+        textHistory = textHistory.take(historyIndex + 1) + updatedText
+        historyIndex = textHistory.lastIndex
+    }
+    fun undo() {
+        if (historyIndex == 0) return
+        historyIndex--
+        text = textHistory[historyIndex]
+    }
+    fun redo() {
+        if (historyIndex >= textHistory.lastIndex) return
+        historyIndex++
+        text = textHistory[historyIndex]
+    }
     BackHandler(onBack = ::requestClose)
     Column(Modifier.fillMaxSize().background(Color(0xFFE7E6E6))) {
-        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).background(Color(0xFF2F5597)).height(38.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("W", color = Color(0xFF2F5597), fontWeight = FontWeight.Bold, modifier = Modifier.background(Color.White).padding(horizontal = 7.dp, vertical = 3.dp).padding(start = 1.dp))
+            IconButton(onClick = ::undo, enabled = historyIndex > 0, modifier = Modifier.size(38.dp)) {
+                Text("↶", color = if (historyIndex > 0) Color.White else Color(0xFF9EB7D8), style = MaterialTheme.typography.titleLarge)
+            }
+            IconButton(onClick = ::redo, enabled = historyIndex < textHistory.lastIndex, modifier = Modifier.size(38.dp)) {
+                Text("↷", color = if (historyIndex < textHistory.lastIndex) Color.White else Color(0xFF9EB7D8), style = MaterialTheme.typography.titleLarge)
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = ::requestClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
+        }
+        Row(Modifier.fillMaxWidth().background(Color(0xFF2F5597)).height(42.dp), verticalAlignment = Alignment.CenterVertically) {
             if (wordTab == "Файл") {
                 IconButton(onClick = { wordTab = "Основне" }) {
                     Text("←", color = Color.White, style = MaterialTheme.typography.headlineSmall)
@@ -1057,8 +1090,6 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             listOf("Файл", "Основне", "Вставлення", "Конструктор", "Макет").forEach { tab ->
                 Text(tab, modifier = Modifier.clickable { wordTab = tab }.background(if (wordTab == tab) Color.White else Color.Transparent).padding(horizontal = 16.dp, vertical = 11.dp), style = MaterialTheme.typography.labelLarge.copy(color = if (wordTab == tab) Color(0xFF234A87) else Color.White))
             }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = ::requestClose) { Text("✕", color = Color.White, style = MaterialTheme.typography.titleLarge) }
         }
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { requestSave() }, enabled = loaded) { Text("Зберегти") }
@@ -1096,7 +1127,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                                 val start = pageIndex * 35
                                 repeat(pageLines.size) { if (start < allLines.size) allLines.removeAt(start) }
                                 allLines.addAll(start, updated.split('\n'))
-                                text = allLines.joinToString("\n")
+                                recordTextChange(allLines.joinToString("\n"))
                             },
                             modifier = Modifier.fillMaxSize().padding(66.dp, 70.dp),
                             onEditorReady = { activeEditor = it },
