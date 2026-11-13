@@ -9,8 +9,10 @@ android {
     namespace = "ua.school.windowsdesktop"
     compileSdk = 36
     val uploadStoreFile = rootProject.file("play-upload-key.jks")
-    val uploadStorePassword = providers.gradleProperty("PLAY_UPLOAD_STORE_PASSWORD").orNull
-    val uploadKeyPassword = providers.gradleProperty("PLAY_UPLOAD_KEY_PASSWORD").orNull
+    val uploadStorePassword = providers.gradleProperty("PLAY_UPLOAD_STORE_PASSWORD")
+        .orElse(providers.environmentVariable("PLAY_UPLOAD_STORE_PASSWORD")).orNull
+    val uploadKeyPassword = providers.gradleProperty("PLAY_UPLOAD_KEY_PASSWORD")
+        .orElse(providers.environmentVariable("PLAY_UPLOAD_KEY_PASSWORD")).orNull
     signingConfigs {
         create("release") {
             if (uploadStoreFile.exists() && uploadStorePassword != null && uploadKeyPassword != null) {
