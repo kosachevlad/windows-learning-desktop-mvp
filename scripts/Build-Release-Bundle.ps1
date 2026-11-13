@@ -9,11 +9,11 @@ try {
         throw 'Missing release upload key: play-upload-key.jks'
     }
     if (-not $env:PLAY_UPLOAD_STORE_PASSWORD) {
-        $secureStorePassword = Read-Host 'Пароль сховища ключів' -AsSecureString
+        $secureStorePassword = Read-Host 'Keystore password' -AsSecureString
         $env:PLAY_UPLOAD_STORE_PASSWORD = [System.Net.NetworkCredential]::new('', $secureStorePassword).Password
     }
     if (-not $env:PLAY_UPLOAD_KEY_PASSWORD) {
-        $secureKeyPassword = Read-Host 'Пароль ключа' -AsSecureString
+        $secureKeyPassword = Read-Host 'Key password' -AsSecureString
         $env:PLAY_UPLOAD_KEY_PASSWORD = [System.Net.NetworkCredential]::new('', $secureKeyPassword).Password
     }
     & .\gradlew.bat --no-daemon bundleRelease
