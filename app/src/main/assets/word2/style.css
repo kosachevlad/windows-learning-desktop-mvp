@@ -2,7 +2,7 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{height:100%}
-body{margin:0;height:var(--native-viewport-height,100%);display:flex;flex-direction:column;overflow:hidden;background:#e6e6e6}
+body{margin:0;height:var(--native-viewport-height,100%);display:flex;flex-direction:column;overflow:hidden;background:#e6e6e6;position:relative}
 button,input,select{font:inherit;color:inherit}
 button{border:1px solid transparent;background:transparent;cursor:pointer;white-space:nowrap}
 button:hover{background:#dedede}
@@ -196,10 +196,10 @@ i svg{width:100%;height:100%}
 #notice{margin-left:auto;overflow:hidden;text-overflow:ellipsis;color:#275991}
 .zoom{margin-left:8px;color:#4b4b4b}
 .phone-zoom{display:none}
-.popup{position:fixed;z-index:6;min-width:142px;background:white;border:1px solid #a5a5a5;box-shadow:0 3px 9px #0003;padding:6px}
+.popup{position:absolute;z-index:6;min-width:142px;background:white;border:1px solid #a5a5a5;box-shadow:0 3px 9px #0003;padding:6px}
 .popup-title{background:#f2f2f2;padding:5px 6px;font-weight:600;margin:-6px -6px 6px;font-size:12px}
 .simple-menu button{display:block;width:100%;padding:5px 9px;text-align:left}
-.size-menu{min-width:0;width:56px;max-height:min(420px,calc(100dvh - 8px));overflow-y:auto;padding:1px 0}
+.size-menu{min-width:0;width:56px;max-height:min(420px,calc(var(--native-viewport-height,100vh) - 16px));overflow-y:auto;padding:1px 0}
 .size-menu button{display:block;width:100%;min-height:23px;padding:2px 5px;text-align:left}
 .size-menu button[aria-selected=true]{background:#e2e2e2}
 .size-menu button:hover,.size-menu button:focus-visible{background:#d5e4f8;outline-offset:-2px}

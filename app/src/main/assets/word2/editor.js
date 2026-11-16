@@ -1100,13 +1100,15 @@ function showMenu(button,keyboard = false) {
   popup.hidden = false;
   button.setAttribute("aria-expanded","true");
   const rect = (button.closest(".size-control") || button).getBoundingClientRect();
+  const viewportHeight = document.body.getBoundingClientRect().height || innerHeight;
+  if (popup === sizeMenu) popup.style.maxHeight = Math.max(80,Math.min(420,viewportHeight-16)) + "px";
   popup.style.left = Math.max(4,Math.min(rect.left,innerWidth-popup.offsetWidth-4)) + "px";
-  popup.style.top = Math.max(4,Math.min(rect.bottom+2,innerHeight-popup.offsetHeight-4)) + "px";
+  popup.style.top = Math.max(4,Math.min(rect.bottom+2,viewportHeight-popup.offsetHeight-4)) + "px";
   if (popup === sizeMenu) {
     const size = Number(sizeInput.value.replace(",","."));
     const current = sizeOptions.find(option => Number(option.dataset.size) === size);
     sizeOptions.forEach(option => option.setAttribute("aria-selected",option === current));
-    (current || sizeOptions[0]).scrollIntoView({block:"nearest"});
+    sizeMenu.scrollTop = Math.max(0,(current || sizeOptions[0]).offsetTop - sizeMenu.offsetTop - sizeMenu.clientHeight/2);
     if (keyboard) (current || sizeOptions[0]).focus();
   }
 }
