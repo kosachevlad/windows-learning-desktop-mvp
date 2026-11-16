@@ -1358,6 +1358,7 @@ async function action(type) {
       case "pageBreak": splitPage(); break;
       case "imageLocal": $("#image-input").click(); break;
       case "openDoc": window.AndroidWord2 ? window.AndroidWord2.open() : $("#file-input").click(); break;
+      case "closeEditor": if (window.AndroidWord2) window.AndroidWord2.close(); else window.history.back(); break;
       case "newDoc": {
         if (await confirmReplace()) loadDocument([newPage()],"Документ 1");
         break;

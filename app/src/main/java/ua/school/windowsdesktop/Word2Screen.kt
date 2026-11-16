@@ -44,10 +44,12 @@ private class Word2Bridge(
     private val onError: (String) -> Unit,
     private val onOpen: () -> Unit,
     private val onSaveAs: (String, String) -> Unit,
+    private val onClose: () -> Unit,
 ) {
     private val main = Handler(Looper.getMainLooper())
     @JavascriptInterface fun open() { main.post(onOpen) }
     @JavascriptInterface fun saveAs(name: String, base64: String) { main.post { onSaveAs(name, base64) } }
+    @JavascriptInterface fun close() { main.post(onClose) }
     @JavascriptInterface
     fun save(name: String, base64: String) {
         scope.launch {
@@ -98,20 +100,23 @@ internal fun Word2Screen(
         ?: FileOperations.ROOT_ID
     var openRequested by remember { mutableStateOf(false) }
     var pendingSave by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var closeRequested by remember { mutableStateOf(false) }
+    var closeAfterSave by remember { mutableStateOf(false) }
     var folderId by remember { mutableStateOf(documentsId) }
     var fileName by remember { mutableStateOf("Документ") }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val bridge = remember(repository, documentsId) {
         Word2Bridge(repository, documentsId, scope, onError,
             onOpen = { folderId = documentsId; openRequested = true },
-            onSaveAs = { name, data -> folderId = documentsId; fileName = name.removeSuffix(".docx"); pendingSave = name to data })
+            onSaveAs = { name, data -> folderId = documentsId; fileName = name.removeSuffix(".docx"); pendingSave = name to data },
+            onClose = { closeRequested = true })
     }
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         fileCallback?.onReceiveValue(uri?.let { arrayOf(it) })
         fileCallback = null
     }
-    BackHandler(onBack = onClose)
+    BackHandler { closeRequested = true }
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
@@ -163,8 +168,24 @@ internal fun Word2Screen(
     val parentId = selectedFolder?.parentId
     val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }
         .sortedWith(compareBy<FileNode> { it.kind != FileKind.FOLDER }.thenBy { it.name.lowercase() })
+    if (closeRequested) AlertDialog(
+        onDismissRequest = { closeRequested = false },
+        title = { Text("Зберегти зміни, внесені в документ?") },
+        text = { Text("Виберіть, чи потрібно зберегти документ перед закриттям Word 2.0.") },
+        confirmButton = { TextButton(onClick = {
+            closeRequested = false
+            closeAfterSave = true
+            webView?.evaluateJavascript("action('saveDoc')", null)
+        }) { Text("Зберегти") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { closeRequested = false; onClose() }) { Text("Не зберігати") }
+                TextButton(onClick = { closeRequested = false }) { Text("Відміна") }
+            }
+        },
+    )
     if (openRequested || pendingSave != null) AlertDialog(
-        onDismissRequest = { openRequested = false; pendingSave = null },
+        onDismissRequest = { openRequested = false; pendingSave = null; closeAfterSave = false },
         title = { Text(if (openRequested) "Відкрити документ" else "Зберегти як") },
         text = {
             Column {
@@ -206,10 +227,11 @@ internal fun Word2Screen(
                         repository.createTextBytes(unique, folderId, Base64.decode(data, Base64.DEFAULT))
                         webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(unique)})", null)
                         pendingSave = null
+                        if (closeAfterSave) { closeAfterSave = false; onClose() }
                     }.onFailure { onError(it.message ?: "Не вдалося зберегти документ") }
                 }
             }, enabled = fileName.isNotBlank()) { Text("Зберегти") }
         },
-        dismissButton = { TextButton(onClick = { openRequested = false; pendingSave = null }) { Text("Скасувати") } },
+        dismissButton = { TextButton(onClick = { openRequested = false; pendingSave = null; closeAfterSave = false }) { Text("Скасувати") } },
     )
 }
