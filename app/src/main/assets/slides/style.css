@@ -121,3 +121,5 @@ body>header{justify-content:space-between}
 body{position:relative;min-height:var(--native-viewport-height,100vh)}
 #player{position:absolute;inset:0 auto auto 0;width:100%;height:var(--native-viewport-height,100vh)}
 #presentCanvas{width:min(100%,max(200px,calc((var(--native-viewport-height,100vh) - 160px)*16/9)))}
+.editor-context-menu{max-height:calc(var(--native-viewport-height,100vh) - 20px)}
+.editor-context-menu.emoji-palette:not([hidden]){max-height:min(440px,calc(var(--native-viewport-height,100vh) - 20px))}

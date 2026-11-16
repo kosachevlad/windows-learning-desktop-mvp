@@ -25,7 +25,9 @@ function showEditorMenu(items,x,y,label,returnFocus){
   }
   contextMenu.hidden=false;contextMenu.style.left='0px';contextMenu.style.top='0px';
   const rect=contextMenu.getBoundingClientRect(),visible=window.visualViewport;
-  const left=visible?.offsetLeft||0,top=visible?.offsetTop||0,width=visible?.width||innerWidth,height=visible?.height||innerHeight;
+  const left=visible?.offsetLeft||0,top=visible?.offsetTop||0,width=visible?.width||innerWidth;
+  const nativeHeight=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--native-viewport-height'))||0;
+  const height=Math.max(visible?.height||0,innerHeight,nativeHeight);
   contextMenu.style.left=Math.max(left+10,Math.min(left+width-rect.width-10,x))+'px';
   contextMenu.style.top=Math.max(top+10,Math.min(top+height-rect.height-10,y))+'px';
   contextMenu.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
