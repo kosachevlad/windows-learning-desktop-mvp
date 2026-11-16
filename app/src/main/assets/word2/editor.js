@@ -1620,6 +1620,7 @@ document.addEventListener("keydown",event => {
     return;
   }
   if (editing && event.key === "Tab") {
+    capture();
     const parent = element(savedRange?.startContainer);
     if (parent?.closest("li")) {
       event.preventDefault();
@@ -1632,6 +1633,19 @@ document.addEventListener("keydown",event => {
         event.preventDefault();
         caret(next.querySelector("p") || next);
       }
+    } else if (!event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      change(() => {
+        const range = selection().getRangeAt(0);
+        range.deleteContents();
+        const tab = document.createElement("span");
+        tab.className = "typed-tab";
+        tab.textContent = "\t";
+        range.insertNode(tab);
+        range.setStartAfter(tab);
+        range.collapse(true);
+        setRange(range);
+      });
     }
   }
   if ((editing || resizeFrame.contains(event.target) || objectTools.contains(event.target)) && selectedObject && ["Backspace","Delete"].includes(event.key)) {

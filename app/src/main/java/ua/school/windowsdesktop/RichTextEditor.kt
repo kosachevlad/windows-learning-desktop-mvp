@@ -29,6 +29,16 @@ class JustifyParagraphSpan : CharacterStyle() { override fun updateDrawState(tp:
 private class SelectionEditText(context: android.content.Context) : EditText(context) {
     var onSelectionChangedCallback: (() -> Unit)? = null
     override fun onSelectionChanged(selStart: Int, selEnd: Int) { super.onSelectionChanged(selStart, selEnd); onSelectionChangedCallback?.invoke() }
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_TAB && !event.isShiftPressed && !event.isCtrlPressed && !event.isAltPressed) {
+            val start = minOf(selectionStart, selectionEnd).coerceAtLeast(0)
+            val end = maxOf(selectionStart, selectionEnd).coerceAtLeast(start)
+            text.replace(start, end, "\t")
+            setSelection(start + 1)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
 }
 
 /** Editable text surface that exposes selection and spans to the Compose toolbar. */

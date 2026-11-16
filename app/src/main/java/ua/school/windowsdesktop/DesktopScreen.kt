@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -30,18 +31,27 @@ internal enum class NewItemKind { FOLDER, TEXT, PAINT, WORD }
 
 @Composable internal fun EmptySpaceContextMenu(onDismiss: () -> Unit, onCreate: (NewItemKind) -> Unit) {
     var createExpanded by remember { mutableStateOf(false) }
+    val wideMenu = LocalConfiguration.current.screenWidthDp >= 500
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
-        DropdownMenuItem(text = { Text("Вигляд") }, onClick = {})
-        DropdownMenuItem(text = { Text("Оновити") }, onClick = {})
-        Box {
-            DropdownMenuItem(text = { Text("Створити  ▸") }, onClick = { createExpanded = true })
-            DropdownMenu(expanded = createExpanded, onDismissRequest = { createExpanded = false }, offset = androidx.compose.ui.unit.DpOffset(230.dp, (-48).dp)) {
-                listOf(NewItemKind.FOLDER to "Папку", NewItemKind.TEXT to "Текстовий документ", NewItemKind.PAINT to "Точковий рисунок", NewItemKind.WORD to "Документ Word").forEach { (kind, label) ->
-                    DropdownMenuItem(text = { Text(label) }, onClick = { createExpanded = false; onCreate(kind) })
+        Row(verticalAlignment = Alignment.Top) {
+            if (wideMenu || !createExpanded) {
+                Column(Modifier.width(220.dp)) {
+                    DropdownMenuItem(text = { Text("Вигляд") }, onClick = {})
+                    DropdownMenuItem(text = { Text("Оновити") }, onClick = {})
+                    DropdownMenuItem(text = { Text("Створити  ▸") }, onClick = { createExpanded = !createExpanded })
+                    DropdownMenuItem(text = { Text("Параметри") }, onClick = {})
+                }
+            }
+            if (createExpanded) {
+                if (wideMenu) VerticalDivider(Modifier.height(288.dp))
+                Column(Modifier.width(220.dp).padding(top = if (wideMenu) 96.dp else 0.dp)) {
+                    if (!wideMenu) DropdownMenuItem(text = { Text("‹  Створити") }, onClick = { createExpanded = false })
+                    listOf(NewItemKind.FOLDER to "Папку", NewItemKind.TEXT to "Текстовий документ", NewItemKind.PAINT to "Точковий рисунок", NewItemKind.WORD to "Документ Word").forEach { (kind, label) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = { createExpanded = false; onCreate(kind) })
+                    }
                 }
             }
         }
-        DropdownMenuItem(text = { Text("Параметри") }, onClick = {})
     }
 }
 private data class DesktopProperties(val name: String, val type: String)

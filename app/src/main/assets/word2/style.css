@@ -90,6 +90,7 @@ i svg{width:100%;height:100%}
   white-space:pre;
 }
 .page p,.page div{margin:0 0 8pt}
+.page .typed-tab{white-space:pre;tab-size:4}
 .page td p,.page th p{margin:0}
 .page p:empty:after{content:"\200b"}
 .page ul,.page ol{padding-left:25pt;margin:0 0 8pt}
