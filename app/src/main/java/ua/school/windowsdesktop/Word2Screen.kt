@@ -64,6 +64,15 @@ private fun nextWord2Name(name: String, existing: List<FileNode>): String {
     return candidate
 }
 
+private fun WebView.updateWord2ViewportHeight() {
+    if (height <= 0) return
+    val cssHeight = height / resources.displayMetrics.density
+    evaluateJavascript(
+        "document.documentElement.style.setProperty('--native-viewport-height', '${cssHeight}px')",
+        null,
+    )
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun Word2Screen(
@@ -86,10 +95,16 @@ internal fun Word2Screen(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             WebView(context).apply {
+                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                    (view as WebView).updateWord2ViewportHeight()
+                }
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = true
                 webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        view?.updateWord2ViewportHeight()
+                    }
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
                         val uri = request.url
                         if (uri.host != "kosachevlad.github.io" || !uri.path.orEmpty().startsWith("/word/")) return null
