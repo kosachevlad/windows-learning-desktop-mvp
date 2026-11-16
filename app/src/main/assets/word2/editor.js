@@ -329,6 +329,28 @@ function splitPage() {
     next.scrollIntoView({block:"start"});
   });
 }
+let lastParagraphInsertAt = 0;
+function insertParagraphAtCaret() {
+  const now = Date.now();
+  if (now - lastParagraphInsertAt < 80) return;
+  lastParagraphInsertAt = now;
+  capture();
+  change(() => {
+    const range = selection().getRangeAt(0);
+    const paragraph = element(range.startContainer)?.closest(".page > p");
+    if (!paragraph || !paragraph.contains(range.endContainer)) return;
+    range.deleteContents();
+    const tail = document.createRange();
+    tail.setStart(range.startContainer,range.startOffset);
+    tail.setEnd(paragraph,paragraph.childNodes.length);
+    const next = document.createElement("p");
+    next.append(tail.extractContents());
+    if (!paragraph.textContent && !paragraph.querySelector("img,.shape")) paragraph.replaceChildren(document.createElement("br"));
+    if (!next.hasChildNodes()) next.append(document.createElement("br"));
+    paragraph.after(next);
+    caret(next);
+  });
+}
 function inline(node) {
   change(() => {
     const range = selection().getRangeAt(0);
@@ -1538,6 +1560,11 @@ editor.addEventListener("pointerdown",event => {
   beginObjectDrag(event,"move");
 });
 editor.addEventListener("beforeinput",event => {
+  if (event.inputType === "insertParagraph" && element(selection().anchorNode)?.closest(".page > p")) {
+    event.preventDefault();
+    insertParagraphAtCaret();
+    return;
+  }
   if (["historyUndo","historyRedo"].includes(event.inputType)) {
     event.preventDefault();
     step(event.inputType === "historyUndo" ? -1 : 1);
@@ -1586,6 +1613,12 @@ document.addEventListener("keydown",event => {
   }
   if ($("#dialog").open || shareDialog.open || event.target.matches?.("input,select")) return;
   const editing = event.target === editor || editor.contains(event.target);
+  if (editing && event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey &&
+      element(selection().anchorNode)?.closest(".page > p")) {
+    event.preventDefault();
+    insertParagraphAtCaret();
+    return;
+  }
   if (editing && event.key === "Tab") {
     const parent = element(savedRange?.startContainer);
     if (parent?.closest("li")) {
