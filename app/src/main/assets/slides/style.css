@@ -116,3 +116,8 @@ body>header{justify-content:space-between}
 .motion-trigger input{margin:0;accent-color:var(--green)}
 .motion-trigger:has(input:disabled){color:var(--muted);cursor:default}
 #presentCanvas [data-pending-animation],#sharedCanvas [data-pending-animation]{display:none}
+
+/* Android WebView may report a smaller dvh than its measured view height. */
+body{position:relative;min-height:var(--native-viewport-height,100vh)}
+#player{position:absolute;inset:0 auto auto 0;width:100%;height:var(--native-viewport-height,100vh)}
+#presentCanvas{width:min(100%,max(200px,calc((var(--native-viewport-height,100vh) - 160px)*16/9)))}

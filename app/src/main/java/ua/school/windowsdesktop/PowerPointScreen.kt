@@ -48,10 +48,18 @@ internal fun PowerPointScreen(onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().weight(1f),
             factory = { context ->
                 WebView(context).apply {
+                    fun syncViewportHeight() {
+                        if (height > 0) {
+                            val cssHeight = height / resources.displayMetrics.density
+                            evaluateJavascript("document.documentElement.style.setProperty('--native-viewport-height', '${cssHeight}px')", null)
+                        }
+                    }
+                    addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncViewportHeight() }
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.allowFileAccess = true
                     webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) { syncViewportHeight() }
                         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
                             val uri = request.url
                             if (uri.host != "kosachevlad.github.io" || !uri.path.orEmpty().startsWith("/slides/")) return null

@@ -158,7 +158,7 @@ function showSlide() {
   $('#prev').disabled = playerIndex === 0;
   updatePlayerNext();
 }
-function startShow(){document.activeElement.blur();playerIndex=active;$('#player').hidden=false;$('#playerTitle').textContent=deck.title;document.body.style.overflow='hidden';showSlide();$('#closePlayer').focus();$('#player').requestFullscreen?.().catch(()=>{})}
+function startShow(){document.activeElement.blur();window.scrollTo(0,0);playerIndex=active;$('#player').hidden=false;$('#playerTitle').textContent=deck.title;document.body.style.overflow='hidden';showSlide();$('#closePlayer').focus();$('#player').requestFullscreen?.().catch(()=>{})}
 function stopAuto(){clearInterval(timer);timer=null;$('#autoplay').textContent='▷ Автопоказ'}
 function stopShow(){stopAuto();$('#player').hidden=true;document.body.style.overflow='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});if(isSharedView)$('#viewerPlay')?.focus();else $('#present').focus()}
 function navigate(direction) {
