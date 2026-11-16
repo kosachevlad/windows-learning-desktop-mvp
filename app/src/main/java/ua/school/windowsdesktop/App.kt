@@ -161,6 +161,26 @@ fun WindowsLearningDesktopApp(
     }
     MaterialTheme {
         Box(Modifier.fillMaxSize()) {
+        if (screen == AppScreen.Word2) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Word2Screen(repository, nodes, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                }
+                Taskbar(
+                    keyboardLanguage = keyboardLanguage,
+                    onKeyboardLanguage = onKeyboardLanguage,
+                    onDesktop = { open(AppScreen.Desktop) },
+                    onFiles = { open(AppScreen.Explorer()) },
+                    onNotepad = { open(AppScreen.Notepad()) },
+                    onPaint = { open(AppScreen.Paint()) },
+                    onBrowser = { open(AppScreen.Browser) },
+                    onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
+                    onWord = { open(AppScreen.WordHome) },
+                    onWord2 = { open(AppScreen.Word2) },
+                    onShowLoading = ::showLoading,
+                )
+            }
+        } else {
         DesktopViewport {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -249,6 +269,7 @@ fun WindowsLearningDesktopApp(
                 onWord2 = { open(AppScreen.Word2) },
                 onShowLoading = ::showLoading,
             )
+        }
         }
         }
         if (showLoader) AppLoadingOverlay()

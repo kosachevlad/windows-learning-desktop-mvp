@@ -264,10 +264,10 @@ dialog input{width:100%;border:1px solid #aaa;padding:6px 8px}
 @media(max-width:850px){:root{--paper-width:calc(100vw - 32px);--margin:clamp(22px,9vw,94px);--paper-height:calc((100vw - 32px) * 1.414)}.page::before,.page::after,.tab-stop{display:none}}
 @media(max-width:475px){.title-spacer,.quick{width:82px}.quick{padding-left:6px}.status{gap:9px;padding:0 6px}.language{display:none}}
 @media (max-width:767px) and (pointer:coarse), (max-width:960px) and (max-height:600px) and (pointer:coarse){
-  :root{--paper-width:794px;--margin:94px;--paper-height:1123px;--phone-zoom:.85}
-  .workspace{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-gutter:auto;padding-inline:12px}
+  :root{--paper-width:calc(100vw - 24px);--margin:clamp(20px,7vw,60px);--paper-height:calc((100vw - 24px) * 1.414);--phone-zoom:1}
+  .workspace{overflow-x:hidden;scrollbar-gutter:auto;padding-inline:12px}
   .ruler-bar{overflow:hidden;padding-inline:12px}
-  .ruler,.page{width:var(--paper-width);zoom:var(--phone-zoom)}
+  .ruler,.page{width:var(--paper-width)}
   .page{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   .page::before,.page::after,.tab-stop{display:none}
   .desktop-zoom{display:none}
