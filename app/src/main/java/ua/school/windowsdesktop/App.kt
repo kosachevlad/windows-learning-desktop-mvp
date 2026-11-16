@@ -75,6 +75,7 @@ private sealed interface AppScreen {
     data object SharedFolder : AppScreen
     data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object WordHome : AppScreen
+    data object Word2 : AppScreen
     data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object ThisPc : AppScreen
@@ -203,6 +204,7 @@ fun WindowsLearningDesktopApp(
                         onNew = { open(AppScreen.Word()) },
                         onOpen = { open(AppScreen.Word(it)) },
                     )
+                    AppScreen.Word2 -> Word2Screen(repository, nodes, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
                     is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onHome = { open(AppScreen.WordHome) },
                         onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
@@ -244,6 +246,7 @@ fun WindowsLearningDesktopApp(
                 onBrowser = { open(AppScreen.Browser) },
                 onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
                 onWord = { open(AppScreen.WordHome) },
+                onWord2 = { open(AppScreen.Word2) },
                 onShowLoading = ::showLoading,
             )
         }
@@ -266,6 +269,7 @@ fun WindowsLearningDesktopApp(
     onBrowser: () -> Unit,
     onMusic: () -> Unit,
     onWord: () -> Unit,
+    onWord2: () -> Unit,
     onShowLoading: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
@@ -306,6 +310,7 @@ fun WindowsLearningDesktopApp(
                     StartApp("PowerPoint", R.drawable.start_powerpoint),
                     StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
                     StartApp("Word", R.drawable.start_word) { startMenu = false; onWord() },
+                    StartApp("Word 2.0", R.drawable.start_word) { startMenu = false; onWord2() },
                     ).sortedBy { it.name.lowercase() }.forEach { app ->
                     DropdownMenuItem(
                         text = { Text(app.name) },
