@@ -77,6 +77,7 @@ private sealed interface AppScreen {
     data object WordHome : AppScreen
     data class Word2(val fileId: String? = null) : AppScreen
     data object Settings : AppScreen
+    data object PowerPoint : AppScreen
     data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object ThisPc : AppScreen
@@ -168,10 +169,11 @@ fun WindowsLearningDesktopApp(
     }
     MaterialTheme {
         Box(Modifier.fillMaxSize()) {
-        if (screen is AppScreen.Word2) {
+        if (screen is AppScreen.Word2 || screen == AppScreen.PowerPoint) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    Word2Screen(repository, nodes, (screen as AppScreen.Word2).fileId, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                    if (screen is AppScreen.Word2) Word2Screen(repository, nodes, (screen as AppScreen.Word2).fileId, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                    else PowerPointScreen(onClose = { open(AppScreen.Desktop) })
                 }
                 Taskbar(
                     keyboardLanguage = keyboardLanguage,
@@ -184,6 +186,7 @@ fun WindowsLearningDesktopApp(
                     onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
                     onWord = { open(if (wordMode == WordMode.WORD_2) AppScreen.Word2() else AppScreen.WordHome) },
                     onWord2 = { open(AppScreen.Word2()) },
+                    onPowerPoint = { open(AppScreen.PowerPoint) },
                     onSettings = { open(AppScreen.Settings) }, wordMode = wordMode,
                     onShowLoading = ::showLoading,
                 )
@@ -233,6 +236,7 @@ fun WindowsLearningDesktopApp(
                         onOpen = { open(AppScreen.Word(it)) },
                     )
                     is AppScreen.Word2 -> Word2Screen(repository, nodes, current.fileId, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                    AppScreen.PowerPoint -> PowerPointScreen(onClose = { open(AppScreen.Desktop) })
                     AppScreen.Settings -> WordSettingsScreen(wordMode, ::setWordMode, onClose = { open(AppScreen.Desktop) })
                     is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onHome = { open(AppScreen.WordHome) },
@@ -276,6 +280,7 @@ fun WindowsLearningDesktopApp(
                 onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
                 onWord = { open(if (wordMode == WordMode.WORD_2) AppScreen.Word2() else AppScreen.WordHome) },
                 onWord2 = { open(AppScreen.Word2()) },
+                onPowerPoint = { open(AppScreen.PowerPoint) },
                 onSettings = { open(AppScreen.Settings) }, wordMode = wordMode,
                 onShowLoading = ::showLoading,
             )
@@ -328,6 +333,7 @@ fun WindowsLearningDesktopApp(
     onMusic: () -> Unit,
     onWord: () -> Unit,
     onWord2: () -> Unit,
+    onPowerPoint: () -> Unit,
     onSettings: () -> Unit,
     wordMode: WordMode,
     onShowLoading: () -> Unit,
@@ -367,7 +373,7 @@ fun WindowsLearningDesktopApp(
                     StartApp("Мої файли", R.drawable.my_files) { startMenu = false; onFiles() },
                     StartApp("Музика", R.drawable.music_icon) { startMenu = false; onMusic() },
                     StartApp("Paint", R.drawable.paint) { startMenu = false; onPaint() },
-                    StartApp("PowerPoint", R.drawable.start_powerpoint),
+                    StartApp("PowerPoint", R.drawable.start_powerpoint) { startMenu = false; onPowerPoint() },
                     StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
                     StartApp("Налаштування", R.drawable.start_settings) { startMenu = false; onSettings() },
                     ).plus(when (wordMode) {

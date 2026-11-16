@@ -1,0 +1,213 @@
+const $=s=>document.querySelector(s),uid=()=>crypto.randomUUID(),clone=o=>JSON.parse(JSON.stringify(o));
+const icons={rotate:'<path d="M4 11a8 8 0 0 1 13-6M17 2v4h-4M20 13a8 8 0 0 1-13 6M7 22v-4h4"/>',play:'<path d="m8 5 11 7-11 7z"/>',text:'<path d="M4 5h16M12 5v15M8 20h8"/>',image:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',shape:'<rect x="3" y="3" width="12" height="12" rx="2"/><circle cx="16" cy="16" r="5"/>',spark:'<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3zM20 2v4M18 4h4"/>',palette:'<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h5a4 4 0 0 0 4-4c0-4-5-6-9-6Z"/><path d="M7 9h.01M10 6h.01M15 6h.01M6 13h.01"/>',undo:'<path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12" transform="translate(0 -2)"/>',redo:'<path d="m15 5 5 5-5 5M20 10H10a6 6 0 0 0 0 12" transform="translate(0 -2)"/>',file:'<path d="M8 3h7l5 5v13H4V3h4ZM14 3v6h6M8 13h8M8 17h6"/>'};
+function icon(k){return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${icons[k]}</svg>`}
+[['present','play','Показ'],['addText','text','Текст'],['addImage','image','Зображення'],['addShape','shape','Фігура'],['animationTool','spark','Анімація'],['themeTool','palette','Дизайн'],['undo','undo',''],['redo','redo','']].forEach(([id,k,t])=>$('#'+id).innerHTML=icon(k)+t);
+function text(content,x,y,w,size,color='#344a32',weight=500){return{id:uid(),type:'text',content,x,y,w,h:16,size,color,weight,align:'left',animation:'none'}}
+function shape(x,y,w,h,color){return{id:uid(),type:'shape',x,y,w,h,color,animation:'none'}}
+function template(type=0){let s={id:uid(),bg:'#edf0e2',notes:'',transition:'fade',elements:[]};if(type===0)s.elements=[shape(67,-14,47,83,'#c1cda6'),shape(78,51,33,59,'#d5ddbe'),text('ПРОСТІР ДЛЯ НОВОГО',7,10,65,1.45,'#718062',700),text('Ваша\nпрезентація',7,30,79,7.5,'#344a32',600),text('Ваша історія починається тут.',7,72,70,2,'#718062'),text('ПРЕЗЕНТАЦІЯ · 2026',7,90,70,1.3,'#879174')];if(type===1)s.elements=[text('ВІД ДУМКИ ДО ДІЇ',7,10,80,1.5,'#7a8869',700),text('Усе починається\nз однієї ідеї.',7,26,78,6.8,'#344a32',600),text('Досліджуйте. Створюйте. Надихайте.\nДайте своїй ідеї простір для зростання.',7,66,78,2.4,'#748366'),shape(83,72,12,21,'#c2cda9')];if(type===2){s.bg='#354c3b';s.elements=[text('НАСТУПНИЙ КРОК',7,12,80,1.5,'#b1c69e',700),text('Створімо щось\nособливе.',7,31,86,7.5,'#edf0e2',600),text('Дякую за увагу!',7,78,80,2.4,'#c1d0b4'),shape(83,-18,31,55,'#506c4e')]};if(type===3)s.elements=[text('Ваш заголовок',8,15,84,6,'#344a32',600),text('Додайте текст, зображення або нову ідею.',8,40,84,2.8,'#748366')];return s}
+let deck={title:'Нова презентація',slides:[template(0),template(1),template(2)]};let active=0,selected=null,rotationTarget=null,tab='design',past=[],future=[],playerIndex=0,timer=null,storageOK=true,isSharedView=false;
+try{const saved=JSON.parse(localStorage.getItem('slayd-deck'));if(validDeck(saved))deck=saved}catch{}
+function validDeck(d){return d&&typeof d.title==='string'&&Array.isArray(d.slides)&&d.slides.length>0&&d.slides.length<=200&&d.slides.every(s=>typeof s.bg==='string'&&Array.isArray(s.elements)&&s.elements.length<=200&&s.elements.every(e=>['text','shape','image'].includes(e.type)&&['x','y','w','h'].every(k=>Number.isFinite(e[k]))&&(e.type!=='image'||/^data:image\/(png|jpeg|webp|gif);base64,/.test(e.src))))}
+const slide=()=>deck.slides[active],element=()=>slide().elements.find(e=>e.id===selected);
+function checkpoint(){past.push(clone(deck));if(past.length>40)past.shift();future=[]}
+function save(){if(isSharedView)return;try{localStorage.setItem('slayd-deck',JSON.stringify(deck));storageOK=true}catch{storageOK=false;toast('Пам’ять пристрою заповнена. Збережіть презентацію через «Поділитися».')}$('#undo').disabled=!past.length;$('#redo').disabled=!future.length}
+let toastTimer;function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3200)}
+function nodeFor(e,mode='edit',i=0){
+  const n=document.createElement('div');n.className='element '+e.type;
+  n.style.left=e.x+'%';n.style.top=e.y+'%';n.style.width=e.w+'%';n.style.height=e.type==='text'?'auto':e.h+'%';
+  n.dataset.id=e.id;n.style.color=e.color;n.style.setProperty('--fs',e.size||3);n.style.fontWeight=e.weight||500;n.style.textAlign=e.align||'left';
+  let frame=n;
+  if(e.type==='text'){
+    frame=document.createElement('span');frame.className='text-content';
+    const value=document.createElement('span');value.className='text-value';value.textContent=e.content||'';frame.append(value);n.append(frame);
+  }
+  if(e.type==='shape'){n.classList.add('shape-'+(e.shapeKind||'circle'));n.append(makeShapeSVG(e.shapeKind||'circle'));}
+  if(e.type==='image'){const img=document.createElement('img');img.src=e.src;img.alt=e.alt||'Зображення на слайді';n.append(img);n.style.borderRadius='2px';}
+  if (mode === 'show' && animationClasses.includes(e.animation)) {
+    if (e.animationOnClick === true) {
+      n.hidden = true;
+      n.dataset.pendingAnimation = e.animation;
+    } else {
+      n.classList.add(e.animation);
+      n.style.animationDelay = i * .12 + 's';
+    }
+  }
+  if(mode==='edit'){
+    if(e.id===selected){
+      n.classList.add('selected');
+      if(rotationTarget===e.id)n.classList.add('rotation-mode');
+      for(const [corner,label] of [['nw','верхній лівий'],['ne','верхній правий'],['sw','нижній лівий'],['se','нижній правий']]){
+        const handle=document.createElement('span');handle.className='resize resize-'+corner;handle.dataset.corner=corner;
+        handle.setAttribute('aria-label',(rotationTarget===e.id?'Повернути: ':'Змінити розмір: ')+label+' кут');frame.append(handle);
+      }
+    }
+    n.tabIndex=0;n.setAttribute('aria-label',e.type==='text'?'Текст на слайді':e.type==='image'?'Зображення на слайді':'Фігура на слайді');
+    n.addEventListener('dblclick',()=>{if(e.type==='text'){selected=e.id;renderProperties();$('#textContent')?.focus();}});
+  }
+  applyElementRotation(n,e);
+  return n;
+}
+function fillCanvas(c,s,mode='edit'){c.innerHTML='';c.style.background=s.bg;s.elements.forEach((e,i)=>c.append(nodeFor(e,mode,i)))}
+function renderList(){const list=$('#slideList');list.innerHTML='';deck.slides.forEach((s,i)=>{const item=document.createElement('div');item.className='slide-item';item.dataset.slideId=s.id;const num=document.createElement('span');num.className='slide-number';num.textContent=String(i+1).padStart(2,'0');const b=document.createElement('button');b.className='thumbnail'+(i===active?' selected':'');b.setAttribute('aria-label','Слайд '+(i+1));const c=document.createElement('div');c.className='thumb-content slide-canvas';fillCanvas(c,s,'thumb');b.append(c);b.onclick=()=>{active=i;selected=null;render()};const label=document.createElement('p');label.className='slide-item-label';label.textContent=s.elements.find(e=>e.type==='text'&&e.size>4)?.content.replace(/\n/g,' ')||'Новий слайд';item.append(num,b,label);list.append(item)});$('#slideCount').textContent=deck.slides.length;$('#footerCount').textContent=`${active+1} / ${deck.slides.length} слайди`;$('#slideLabel').textContent=`Слайд ${String(active+1).padStart(2,'0')}`}
+function render(){if(rotationTarget!==selected)rotationTarget=null;active=Math.min(active,deck.slides.length-1);fillCanvas($('#canvas'),slide());renderList();renderProperties();save()}
+function updateCanvas(){fillCanvas($('#canvas'),slide());renderList();save()}
+const colors=['#edf0e2','#f4e9d8','#e3edf1','#eee4ee','#ffffff','#354c3b'];const anims=[['none','○','Без анімації'],['fade','◌','Поява'],['rise','↑','Знизу вгору'],['zoom','⤢','Масштаб'],['pulse','♡','Імпульс'],['spin','⟳','Обертання'],['bounce','↟','Стрибок'],['sway','↔','Гойдання'],['flip','⤾','Переворот']];
+const animationClasses=anims.map(([name])=>name).filter(name=>name!=='none');
+function hasPendingAnimation(canvas) {
+  return Boolean(canvas.querySelector('[data-pending-animation]'));
+}
+function playPendingAnimation(canvas) {
+  const node = canvas.querySelector('[data-pending-animation]');
+  if (!node) return false;
+  node.classList.add(node.dataset.pendingAnimation);
+  delete node.dataset.pendingAnimation;
+  node.hidden = false;
+  return true;
+}
+function bindSlideGestures(canvas, playAnimation, swipeSlide) {
+  let touchStart = null;
+  canvas.onclick = playAnimation;
+  canvas.ontouchstart = event => {
+    const touch = event.changedTouches[0];
+    touchStart = {x: touch.clientX, y: touch.clientY};
+  };
+  canvas.ontouchend = event => {
+    if (!touchStart) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStart.x;
+    const dy = touch.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.abs(dx) <= 40 || Math.abs(dx) <= Math.abs(dy)) return;
+    event.preventDefault();
+    swipeSlide(dx < 0 ? 1 : -1);
+  };
+  canvas.ontouchcancel = () => { touchStart = null; };
+}
+const motionPreviewTimers=new WeakMap();
+function previewAnimation(node,name){clearTimeout(motionPreviewTimers.get(node));node.classList.remove(...animationClasses);void node.offsetWidth;if(!animationClasses.includes(name))return;node.classList.add(name);motionPreviewTimers.set(node,setTimeout(()=>node.classList.remove(name),1500));}
+function mountColorPicker(container,inputId,initial,label,onChange){
+  const row=document.createElement('div');row.className='swatches color-options';row.setAttribute('role','group');row.setAttribute('aria-label',label);
+  const choices=[];let current=initial;
+  const custom=document.createElement('input');custom.type='color';custom.id=inputId;custom.className='custom-color-swatch';custom.value=current;
+  custom.title='Власний колір';custom.setAttribute('aria-label',inputId==='customBg'?'Власний колір слайда':'Власний колір елемента');
+  function sync(){for(const [button,c] of choices){const active=c.toLowerCase()===current.toLowerCase();button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}custom.value=current;custom.classList.toggle('active',!colors.includes(current.toLowerCase()));}
+  function choose(c){current=c;onChange(c);sync();}
+  for(const c of colors){const button=document.createElement('button');button.type='button';button.className='swatch';button.style.background=c;button.setAttribute('aria-label','Колір '+c);button.onclick=()=>choose(c);choices.push([button,c]);row.append(button);}
+  custom.onchange=()=>choose(custom.value);row.append(custom);container.append(row);sync();
+}
+function renderProperties(){const p=$('#properties');p.innerHTML='';$('#designTab').classList.toggle('active',tab==='design');$('#motionTab').classList.toggle('active',tab==='motion');const e=element();$('#canvasHint').textContent=e?(rotationTarget===e.id?'Поворот: '+normalizeRotation(e.rotation)+'° · тягніть круглий маркер':'Перетягніть елемент або змініть його параметри'):'Виберіть елемент, щоб редагувати';if (tab === 'motion') {
+  p.innerHTML = `<div class="section-title">${e?'Анімація елемента':'Перехід слайда'}</div>
+    <p class="muted">${e?'Оберіть ефект для елемента під час показу.':'Оберіть ефект появи цього слайда.'}</p>
+    <div class="animation-options"></div>
+    ${e ? '<label class="motion-trigger"><input id="animationOnClick" type="checkbox"> За кліком або дотиком</label>' : ''}
+    <button id="testMotion" class="field" style="margin-top:18px">▷ Переглянути ефект</button>`;
+  const effect = e ? e.animation : slide().transition;
+  anims.forEach(([value, symbol, title]) => {
+    const button = document.createElement('button');
+    button.innerHTML = `<span>${symbol}</span>${title}`;
+    button.classList.toggle('active', effect === value);
+    button.onclick = () => {
+      checkpoint();
+      if (e) e.animation = value;
+      else slide().transition = value;
+      renderProperties();
+      save();
+    };
+    p.querySelector('.animation-options').append(button);
+  });
+  if (e) {
+    const trigger = $('#animationOnClick');
+    trigger.checked = e.animationOnClick === true;
+    trigger.disabled = !animationClasses.includes(effect);
+    trigger.onchange = () => {
+      checkpoint();
+      if (trigger.checked) e.animationOnClick = true;
+      else delete e.animationOnClick;
+      save();
+    };
+  }
+  $('#testMotion').onclick = () => {
+    const node = e ? $('#canvas').querySelector(`[data-id="${e.id}"]`) : $('#canvas');
+    previewAnimation(node, effect);
+  };
+  return;
+}
+if(e){p.innerHTML=`<div class="section-title">${e.type==='text'?'Текст':e.type==='image'?'Зображення':'Фігура'}</div>`;if(e.type==='text'){p.insertAdjacentHTML('beforeend','<label class="property-label" for="textContent">Ваш текст</label><textarea id="textContent" class="field text-edit"></textarea><label class="property-label">Розмір і накреслення</label><div class="row font-settings"><div class="size-stepper"><button id="fontSmaller" type="button" aria-label="Зменшити розмір тексту">−</button><input id="fontSize" class="field" type="number" inputmode="decimal" min="1" max="18" step="0.2" aria-label="Розмір тексту"><button id="fontLarger" type="button" aria-label="Збільшити розмір тексту">+</button></div><button id="bold" aria-label="Жирний"><b>B</b></button><select id="align" class="field" aria-label="Вирівнювання"><option value="left">Ліворуч</option><option value="center">По центру</option><option value="right">Праворуч</option></select></div>');$('#textContent').value=e.content;$('#textContent').onchange=()=>{const value=$('#textContent').value;if(e.content===value)return;checkpoint();e.content=value;updateCanvas()};$('#textContent').oninput=()=>{const n=$('#canvas').querySelector(`[data-id="${e.id}"]`);n.querySelector('.text-value').textContent=$('#textContent').value};$('#fontSize').max=maxTextSize(e);$('#fontSize').value=e.size;$('#fontSmaller').disabled=e.size<=1;$('#fontLarger').disabled=e.size>=maxTextSize(e);$('#fontSmaller').onclick=()=>changeTextSize(-.2);$('#fontLarger').onclick=()=>changeTextSize(.2);$('#fontSize').onchange=()=>{checkpoint();e.size=clampTextSize(Number($('#fontSize').value)||3,e);updateCanvas();syncFontSizeControls()};$('#bold').style.background=e.weight>=700?'#eaf0e2':'';$('#bold').onclick=()=>{checkpoint();e.weight=e.weight>=700?500:800;updateCanvas();renderProperties()};$('#align').value=e.align;$('#align').onchange=()=>{checkpoint();e.align=$('#align').value;updateCanvas()}}
+if(e.type!=='image'){p.insertAdjacentHTML('beforeend','<div class="property-label">Колір елемента</div><div id="elementColorPicker"></div>');mountColorPicker($('#elementColorPicker'),'elementColor',e.color,'Колір елемента',c=>{if(e.color===c)return;checkpoint();e.color=c;updateCanvas()})}
+p.insertAdjacentHTML('beforeend','<div class="section-title">Розташування</div><div class="row"><button id="backward">На задній план</button><button id="forward">На передній план</button></div><div class="row" style="margin-top:10px"><button id="copyElement">Дублювати</button><button id="deleteElement" class="danger">Видалити</button></div><p class="muted">Перетягніть елемент на слайді. Потягніть за кут, щоб змінити розмір.</p>');$('#backward').onclick=()=>{checkpoint();slide().elements=slide().elements.filter(x=>x!==e);slide().elements.unshift(e);updateCanvas()};$('#forward').onclick=()=>{checkpoint();slide().elements=slide().elements.filter(x=>x!==e);slide().elements.push(e);updateCanvas()};$('#copyElement').onclick=()=>{checkpoint();const c=clone(e);c.id=uid();c.x=Math.min(85,c.x+3);c.y=Math.min(85,c.y+3);slide().elements.push(c);selected=c.id;render()};$('#deleteElement').onclick=deleteSelected;
+}else{p.innerHTML='<div class="section-title">Колір слайда</div><div id="slideColorPicker"></div><div class="section-title">Макет слайда</div><div class="template-grid"></div><p class="muted">Макет додається як новий слайд.</p><div class="section-title">Керування слайдом</div><div class="row"><button id="duplicateSlide">Дублювати</button><button id="deleteSlide" class="danger">Видалити</button></div><div class="row" style="margin-top:8px"><button id="moveLeft">← Раніше</button><button id="moveRight">Пізніше →</button></div>';mountColorPicker($('#slideColorPicker'),'customBg',slide().bg,'Колір слайда',c=>{if(slide().bg===c)return;checkpoint();slide().bg=c;updateCanvas()});['Титульний','Ідея','Завершення','Простий'].forEach((t,i)=>{const b=document.createElement('button');b.className='template';b.innerHTML=`<div class="template-art" style="${i===2?'background:#354c3b;color:#edf0e2':''}">${i===0?'Aa':i===1?'Aa<br>—':i===2?'Дякую.':'Aa —'}</div>${t}`;b.onclick=()=>addSlide(i);$('.template-grid').append(b)});$('#duplicateSlide').onclick=()=>{checkpoint();const c=clone(slide());c.id=uid();c.elements.forEach(e=>e.id=uid());deck.slides.splice(++active,0,c);render()};$('#deleteSlide').disabled=deck.slides.length===1;$('#deleteSlide').onclick=()=>{checkpoint();deck.slides.splice(active,1);active=Math.max(0,active-1);render()};$('#moveLeft').disabled=active===0;$('#moveRight').disabled=active===deck.slides.length-1;$('#moveLeft').onclick=()=>moveSlide(-1);$('#moveRight').onclick=()=>moveSlide(1)}}
+function moveSlide(d){checkpoint();const s=deck.slides.splice(active,1)[0];active+=d;deck.slides.splice(active,0,s);render()}
+function addSlide(t=3){checkpoint();deck.slides.splice(++active,0,template(t));selected=null;render();toast('Новий слайд додано')}
+function deleteSelected(){if(!element())return;checkpoint();slide().elements=slide().elements.filter(e=>e.id!==selected);selected=null;render()}
+$('#newSlide').onclick=$('#newSlideBottom').onclick=()=>addSlide();$('#addText').onclick=()=>{checkpoint();const e=text('Ваш новий текст',10,36,75,5);slide().elements.push(e);selected=e.id;tab='design';render();$('#textContent').focus();$('#textContent').select()};$('#addImage').onclick=()=>$('#imageInput').click();
+$('#imageInput').onchange=async ev=>{const f=ev.target.files[0];if(!f)return;ev.target.value='';if(!f.type.startsWith('image/'))return toast('Оберіть файл зображення');if(f.size>25*1024*1024)return toast('Оберіть зображення до 25 МБ');try{const uploadDeck=deck;const bitmap=await createImageBitmap(f);if(deck!==uploadDeck){bitmap.close();return;}const scale=Math.min(1,1400/Math.max(bitmap.width,bitmap.height));const c=document.createElement('canvas');c.width=bitmap.width*scale;c.height=bitmap.height*scale;c.getContext('2d').drawImage(bitmap,0,0,c.width,c.height);const ratio=c.width/c.height;const w=Math.min(65,55*ratio*9/16),h=w*16/9/ratio;const e={id:uid(),type:'image',src:c.toDataURL('image/webp',.85),alt:f.name,x:(100-w)/2,y:(100-h)/2,w,h,animation:'none'};bitmap.close();checkpoint();slide().elements.push(e);selected=e.id;tab='design';render();toast('Зображення додано')}catch{toast('Не вдалося відкрити це зображення. Спробуйте PNG або JPG.')}};
+$('#undo').onclick=()=>{if(!past.length)return;future.push(clone(deck));deck=past.pop();selected=null;render()};$('#redo').onclick=()=>{if(!future.length)return;past.push(clone(deck));deck=future.pop();selected=null;render()};$('#designTab').onclick=$('#themeTool').onclick=(ev)=>{tab='design';if(ev.currentTarget.id==='themeTool')selected=null;render();if(innerWidth<761)$('.inspector').scrollIntoView({behavior:'smooth',block:'start'})};$('#motionTab').onclick=$('#animationTool').onclick=()=>{tab='motion';renderProperties();if(innerWidth<761)$('.inspector').scrollIntoView({behavior:'smooth',block:'start'})};
+const presentCanvas = $('#presentCanvas');
+function renderPlaybackSlide(canvas, currentSlide) {
+  fillCanvas(canvas, currentSlide, 'show');
+  canvas.classList.remove(...animationClasses);
+  void canvas.offsetWidth;
+  if (animationClasses.includes(currentSlide.transition)) canvas.classList.add(currentSlide.transition);
+}
+function updatePlayerNext() {
+  $('#next').disabled = playerIndex === deck.slides.length - 1 && !hasPendingAnimation(presentCanvas);
+}
+function showSlide() {
+  renderPlaybackSlide(presentCanvas, deck.slides[playerIndex]);
+  $('#playerCount').textContent = `${playerIndex+1} / ${deck.slides.length}`;
+  $('#prev').disabled = playerIndex === 0;
+  updatePlayerNext();
+}
+function startShow(){document.activeElement.blur();playerIndex=active;$('#player').hidden=false;$('#playerTitle').textContent=deck.title;document.body.style.overflow='hidden';showSlide();$('#closePlayer').focus();$('#player').requestFullscreen?.().catch(()=>{})}
+function stopAuto(){clearInterval(timer);timer=null;$('#autoplay').textContent='▷ Автопоказ'}
+function stopShow(){stopAuto();$('#player').hidden=true;document.body.style.overflow='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});if(isSharedView)$('#viewerPlay')?.focus();else $('#present').focus()}
+function navigate(direction) {
+  const nextIndex = playerIndex + direction;
+  if (nextIndex < 0 || nextIndex >= deck.slides.length) return;
+  playerIndex = nextIndex;
+  showSlide();
+}
+function playPlayerAnimation() {
+  if (!playPendingAnimation(presentCanvas)) return false;
+  updatePlayerNext();
+  return true;
+}
+function advancePlayer() {
+  if (!playPlayerAnimation()) navigate(1);
+}
+$('#present').onclick = $('#preview').onclick = startShow;
+$('#closePlayer').onclick = stopShow;
+$('#prev').onclick = () => navigate(-1);
+$('#next').onclick = advancePlayer;
+$('#autoplay').onclick = () => {
+  if (timer) return stopAuto();
+  $('#autoplay').textContent = 'Ⅱ Пауза';
+  timer = setInterval(() => {
+    if (hasPendingAnimation(presentCanvas)) return;
+    if (playerIndex === deck.slides.length - 1) return stopAuto();
+    navigate(1);
+  }, 5000);
+};
+bindSlideGestures(presentCanvas, playPlayerAnimation, navigate);
+document.addEventListener('keydown', ev => {
+  if (!$('#player').hidden) {
+    if (ev.key === 'Escape') stopShow();
+    if (['ArrowRight',' ','PageDown'].includes(ev.key)) {
+      if (ev.key === ' ' && document.activeElement.tagName === 'BUTTON' && document.activeElement.id !== 'closePlayer') return;
+      ev.preventDefault();
+      if (!ev.repeat) advancePlayer();
+    }
+    if (['ArrowLeft','PageUp'].includes(ev.key)) navigate(-1);
+    return;
+  }
+  if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'z') {
+    ev.preventDefault();
+    ev.shiftKey ? $('#redo').click() : $('#undo').click();
+  }
+  if (['Delete','Backspace'].includes(ev.key) && selected) {
+    ev.preventDefault();
+    deleteSelected();
+  }
+});
+render();

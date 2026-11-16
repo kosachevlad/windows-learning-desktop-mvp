@@ -207,7 +207,7 @@ function update() {
   const words = editor.innerText.match(/[\p{L}\p{N}]+(?:['’ʼ-][\p{L}\p{N}]+)*/gu) || [];
   $("#page-status").textContent = "Сторінка " + ([...editor.children].indexOf(pageAt())+1) + " з " + editor.children.length;
   $("#word-status").textContent = "Слів: " + words.length;
-  $("#title").textContent = document.title = name + " — Вебредактор";
+  $("#title").textContent = document.title = name + " — Word 2.0";
   $("[data-action=undo]").disabled = index <= 0;
   $("[data-action=redo]").disabled = index >= history.length-1;
   const parent = element(savedRange?.startContainer);
