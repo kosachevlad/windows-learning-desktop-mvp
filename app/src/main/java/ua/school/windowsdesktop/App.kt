@@ -164,9 +164,16 @@ fun WindowsLearningDesktopApp(
             }
         }
         val musicFolder = rootChildren.firstOrNull { it.kind == FileKind.FOLDER && it.name == "Музика" }
-        if (musicFolder != null && repository.children(musicFolder.id).none { it.name.endsWith(".mp3", true) }) {
-            val bytes = withContext(Dispatchers.IO) { context.assets.open("music/vivaldi-winter.mp3").use { it.readBytes() } }
-            repository.createPaint("Антоніо Вівальді — Зима.mp3", musicFolder.id, bytes)
+        if (musicFolder != null) {
+            val existingNames = repository.children(musicFolder.id).map { it.name }.toSet()
+            val bundledSongs = listOf(
+                "Антоніо Вівальді — Зима.mp3" to "vivaldi-winter.mp3",
+                "Океан Ельзи - Той день - 320.mp3" to "okean-elzy-toy-den-320.mp3",
+            )
+            bundledSongs.filter { (name, _) -> name !in existingNames }.forEach { (name, asset) ->
+                val bytes = withContext(Dispatchers.IO) { context.assets.open("music/$asset").use { it.readBytes() } }
+                repository.createPaint(name, musicFolder.id, bytes)
+            }
         }
     }
     MaterialTheme {
@@ -1309,6 +1316,7 @@ private fun wordDocumentBaseName(name: String): String =
     var position by remember(file?.id) { mutableIntStateOf(0) }
     var playing by remember(file?.id) { mutableStateOf(false) }
     var volume by remember(file?.id) { mutableFloatStateOf(1f) }
+    var volumeMenuExpanded by remember(file?.id) { mutableStateOf(false) }
     var prepared by remember(file?.id) { mutableStateOf(false) }
     var playbackError by remember(file?.id) { mutableStateOf(false) }
     LaunchedEffect(file?.id) {
@@ -1338,23 +1346,35 @@ private fun wordDocumentBaseName(name: String): String =
             Text(file?.name ?: "Музичний файл", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
             if (playbackError) Text("Не вдалося підготувати аудіо", color = Color(0xFFB00020))
             Slider(value = position.toFloat(), onValueChange = { value -> position = value.toInt(); player?.let { runCatching { it.seekTo(position) } } }, valueRange = 0f..duration.coerceAtLeast(1).toFloat())
-            Text("Гучність: ${(volume * 100).roundToInt()}%", modifier = Modifier.align(Alignment.Start))
-            Slider(
-                value = volume,
-                onValueChange = { value ->
-                    volume = value
-                    player?.setVolume(value, value)
-                },
-                valueRange = 0f..1f,
-            )
-            Button(onClick = {
-                player?.let { media ->
-                    runCatching {
-                        if (media.isPlaying) media.pause() else media.start()
-                    }.onSuccess { playing = media.isPlaying }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box {
+                    IconButton(onClick = { volumeMenuExpanded = true }) {
+                        Icon(painterResource(R.drawable.ic_volume), contentDescription = "Гучність")
+                    }
+                    DropdownMenu(expanded = volumeMenuExpanded, onDismissRequest = { volumeMenuExpanded = false }) {
+                        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Slider(
+                                value = volume * 100f,
+                                onValueChange = { value ->
+                                    volume = value.roundToInt().coerceIn(0, 100) / 100f
+                                    player?.setVolume(volume, volume)
+                                },
+                                valueRange = 0f..100f,
+                                modifier = Modifier.width(160.dp),
+                            )
+                            Text("${(volume * 100).roundToInt()}", modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
                 }
-            }, enabled = prepared) {
-                Text(if (playing) "Ⅱ Pause" else "▶ Play")
+                Button(onClick = {
+                    player?.let { media ->
+                        runCatching {
+                            if (media.isPlaying) media.pause() else media.start()
+                        }.onSuccess { playing = media.isPlaying }
+                    }
+                }, enabled = prepared) {
+                    Text(if (playing) "Ⅱ Pause" else "▶ Play")
+                }
             }
         }
     }
