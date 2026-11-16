@@ -1357,13 +1357,20 @@ async function action(type) {
       case "outdentList": listLevel(true); break;
       case "pageBreak": splitPage(); break;
       case "imageLocal": $("#image-input").click(); break;
-      case "openDoc": $("#file-input").click(); break;
+      case "openDoc": window.AndroidWord2 ? window.AndroidWord2.open() : $("#file-input").click(); break;
       case "newDoc": {
         if (await confirmReplace()) loadDocument([newPage()],"Документ 1");
         break;
       }
       case "saveAndShare": openShareDialog(); break;
       case "saveDoc": {
+        if (window.AndroidWord2) {
+          const blob = Docx.write(editor);
+          const reader = new FileReader();
+          reader.onload = () => window.AndroidWord2.saveAs(docxFilename(name),String(reader.result).split(",")[1]);
+          reader.readAsDataURL(blob);
+          break;
+        }
         const input = await ask({title:"Зберегти як",label:"Ім’я файлу",value:name,ok:"Зберегти",viber:true});
         if (!input) break;
         const filename = docxFilename(input);
@@ -1418,6 +1425,23 @@ $("#file-input").addEventListener("change",async event => {
     flash("Відкрито " + file.name);
   } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
 });
+window.word2OpenFromApp = async (filename,base64) => {
+  if (!await confirmReplace()) return;
+  try {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary,character => character.charCodeAt(0));
+    const file = new File([bytes],filename,{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+    loadDocument(await Docx.read(file),filename.replace(/\.docx$/i,""));
+    flash("Відкрито " + filename);
+  } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
+};
+window.word2SavedInApp = filename => {
+  name = filename.replace(/\.docx$/i,"");
+  savedHtml = html();
+  update();
+  scheduleDraftSave();
+  flash("Збережено " + filename);
+};
 $("#image-input").addEventListener("change",async event => {
   const file = event.target.files[0];
   event.target.value = "";

@@ -3,6 +3,8 @@ package ua.school.windowsdesktop
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.util.Base64
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -14,6 +16,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.net.Uri
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +42,12 @@ private class Word2Bridge(
     private val documentsId: String,
     private val scope: CoroutineScope,
     private val onError: (String) -> Unit,
+    private val onOpen: () -> Unit,
+    private val onSaveAs: (String, String) -> Unit,
 ) {
+    private val main = Handler(Looper.getMainLooper())
+    @JavascriptInterface fun open() { main.post(onOpen) }
+    @JavascriptInterface fun saveAs(name: String, base64: String) { main.post { onSaveAs(name, base64) } }
     @JavascriptInterface
     fun save(name: String, base64: String) {
         scope.launch {
@@ -84,7 +96,16 @@ internal fun Word2Screen(
     val scope = rememberCoroutineScope()
     val documentsId = nodes.firstOrNull { it.parentId == FileOperations.ROOT_ID && it.kind == FileKind.FOLDER && it.name == "Документи" }?.id
         ?: FileOperations.ROOT_ID
-    val bridge = remember(repository, documentsId) { Word2Bridge(repository, documentsId, scope, onError) }
+    var openRequested by remember { mutableStateOf(false) }
+    var pendingSave by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var folderId by remember { mutableStateOf(documentsId) }
+    var fileName by remember { mutableStateOf("Документ") }
+    var webView by remember { mutableStateOf<WebView?>(null) }
+    val bridge = remember(repository, documentsId) {
+        Word2Bridge(repository, documentsId, scope, onError,
+            onOpen = { folderId = documentsId; openRequested = true },
+            onSaveAs = { name, data -> folderId = documentsId; fileName = name.removeSuffix(".docx"); pendingSave = name to data })
+    }
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         fileCallback?.onReceiveValue(uri?.let { arrayOf(it) })
@@ -95,6 +116,7 @@ internal fun Word2Screen(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             WebView(context).apply {
+                webView = this
                 addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
                     (view as WebView).updateWord2ViewportHeight()
                 }
@@ -136,5 +158,58 @@ internal fun Word2Screen(
             }
         },
         onRelease = { view -> view.removeJavascriptInterface("AndroidWord2"); view.destroy() },
+    )
+    val selectedFolder = nodes.firstOrNull { it.id == folderId && it.kind == FileKind.FOLDER }
+    val parentId = selectedFolder?.parentId
+    val children = nodes.filter { it.parentId == folderId && it.trashedAt == null }
+        .sortedWith(compareBy<FileNode> { it.kind != FileKind.FOLDER }.thenBy { it.name.lowercase() })
+    if (openRequested || pendingSave != null) AlertDialog(
+        onDismissRequest = { openRequested = false; pendingSave = null },
+        title = { Text(if (openRequested) "Відкрити документ" else "Зберегти як") },
+        text = {
+            Column {
+                Text("Папка: ${selectedFolder?.name ?: "Мої файли"}")
+                Row {
+                    TextButton(onClick = { folderId = FileOperations.ROOT_ID }) { Text("⌂ Мої файли") }
+                    TextButton(onClick = { folderId = parentId ?: FileOperations.ROOT_ID }, enabled = parentId != null) { Text("↑ Вгору") }
+                }
+                Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    children.forEach { child ->
+                        if (child.kind == FileKind.FOLDER) {
+                            TextButton(onClick = { folderId = child.id }) { Text("📁 ${child.name}") }
+                        } else if (openRequested && child.kind == FileKind.TEXT && child.name.endsWith(".docx", true)) {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    runCatching {
+                                        val data = Base64.encodeToString(repository.readTextBytes(child.id), Base64.NO_WRAP)
+                                        webView?.evaluateJavascript("window.word2OpenFromApp(${org.json.JSONObject.quote(child.name)},${org.json.JSONObject.quote(data)})", null)
+                                        openRequested = false
+                                    }.onFailure { onError(it.message ?: "Не вдалося відкрити документ") }
+                                }
+                            }) { Text("📄 ${child.name}") }
+                        } else if (pendingSave != null) Text(child.name, Modifier.padding(10.dp))
+                    }
+                }
+                if (pendingSave != null) OutlinedTextField(fileName, { fileName = it.removeSuffix(".docx") }, label = { Text("Ім’я файлу") }, singleLine = true)
+            }
+        },
+        confirmButton = {
+            if (pendingSave != null) TextButton(onClick = {
+                val data = pendingSave?.second ?: return@TextButton
+                val safeName = fileName.trim().replace(Regex("[<>:\"/\\\\|?*]"), "_").removeSuffix(".docx")
+                if (safeName.isBlank()) return@TextButton
+                scope.launch {
+                    runCatching {
+                        val target = "$safeName.docx"
+                        val existing = repository.children(folderId)
+                        val unique = nextWord2Name(target, existing)
+                        repository.createTextBytes(unique, folderId, Base64.decode(data, Base64.DEFAULT))
+                        webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(unique)})", null)
+                        pendingSave = null
+                    }.onFailure { onError(it.message ?: "Не вдалося зберегти документ") }
+                }
+            }, enabled = fileName.isNotBlank()) { Text("Зберегти") }
+        },
+        dismissButton = { TextButton(onClick = { openRequested = false; pendingSave = null }) { Text("Скасувати") } },
     )
 }
