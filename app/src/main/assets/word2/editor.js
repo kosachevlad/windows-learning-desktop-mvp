@@ -45,7 +45,7 @@ for (let quarter = -12; quarter <= 84; quarter++) {
   $("#ruler").append(mark);
 }
 
-let savedRange, selectedObject, activeMenu, noticeTimer, resolveDialog, localClipboard;
+let savedRange, fontSelectionRange, selectedObject, activeMenu, noticeTimer, resolveDialog, localClipboard;
 let name = "Документ 1";
 let savedHtml;
 let history = [], index = -1, previousType = "", lastChange = 0;
@@ -96,6 +96,7 @@ function capture() {
   const range = selection().rangeCount && selection().getRangeAt(0);
   if (range && editor.contains(range.startContainer) && editor.contains(range.endContainer)) {
     savedRange = range.cloneRange();
+    if (!range.collapsed) fontSelectionRange = range.cloneRange();
     return savedRange;
   }
 }
@@ -1485,7 +1486,12 @@ document.addEventListener("click",event => {
     $("[data-menu=" + menuId + "] .ink").style.setProperty("--ink",data.color);
   }
 });
-$("#font").addEventListener("change",event => exec("fontName",event.target.value));
+$("#font").addEventListener("change",event => {
+  if (fontSelectionRange && editor.contains(fontSelectionRange.startContainer) && editor.contains(fontSelectionRange.endContainer)) {
+    setRange(fontSelectionRange);
+  }
+  exec("fontName",event.target.value);
+});
 sizeInput.addEventListener("change",event => fontSize(event.target.value));
 sizeInput.addEventListener("keydown",event => {
   if (event.key === "Enter") {
@@ -1520,6 +1526,7 @@ editor.addEventListener("click",event => {
   selectObject(behind || direct || null);
 });
 editor.addEventListener("pointerdown",event => {
+  fontSelectionRange = null;
   if (!editor.isContentEditable || event.button !== 0 || resizeDrag) return;
   const direct = event.target.closest(".shape,img");
   const behind = (!direct || event.altKey) && behindObjectAt(event);
