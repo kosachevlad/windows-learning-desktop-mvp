@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Калькулятор</title>
+
+    <!-- SEO and browser UI -->
+    <meta
+      name="description"
+      content="A fast, accessible calculator with keyboard support, calculation history and light/dark themes."
+    />
+    <!-- Colour of the mobile browser bar; app.js updates it when the theme changes. -->
+    <meta name="theme-color" content="#f4f5f7" />
+
+    <!-- Open Graph tags: how the link looks when shared on social media / chat apps -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Calculator" />
+    <meta
+      property="og:description"
+      content="A fast, accessible calculator with keyboard support, calculation history and light/dark themes."
+    />
+    <meta property="og:site_name" content="Calculator" />
+    <!-- After deploying, add absolute URLs (Open Graph requires absolute URLs):
+    <meta property="og:url" content="https://<username>.github.io/<repo-name>/" />
+    <meta property="og:image" content="https://<username>.github.io/<repo-name>/assets/og-image.png" />
+    -->
+
+    <!-- Relative paths (no leading "/") so the site works under /<repo-name>/ on GitHub Pages -->
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+
+    <!-- System fonts keep the bundled calculator available offline. -->
+
+    <!--
+      Apply the saved theme BEFORE the page is painted, otherwise users who chose
+      dark mode would see a white "flash" while app.js loads.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('calculator.theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.dataset.theme = saved;
+          }
+        } catch (e) {
+          /* localStorage can be blocked (private mode); the system theme is used instead. */
+        }
+      })();
+    </script>
+
+    <link rel="stylesheet" href="css/style.css" />
+    <!-- type="module" lets app.js use import/export. Modules are deferred automatically. -->
+    <script type="module" src="js/app.js"></script>
+  </head>
+
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1 class="app-title">Калькулятор</h1>
+        <button
+          id="theme-toggle"
+          class="theme-toggle"
+          type="button"
+          aria-label="Switch to dark theme"
+          aria-pressed="false"
+        >
+          <!-- Moon icon (shown in light mode) -->
+          <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+          <!-- Sun icon (shown in dark mode) -->
+          <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="4.5" />
+            <path
+              d="M12 1.5v3M12 19.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M1.5 12h3M19.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"
+            />
+          </svg>
+        </button>
+      </header>
+
+      <section class="calculator" aria-label="Калькулятор">
+        <!-- Display: expression line on top, current value below -->
+        <div class="display">
+          <div id="expression" class="display-expression" aria-label="Expression"></div>
+          <!--
+            aria-live="polite" makes screen readers announce the value whenever it
+            changes (including results and error messages) without interrupting.
+          -->
+          <output id="result" class="display-result" aria-live="polite" aria-atomic="true">0</output>
+        </div>
+
+        <!--
+          Keypad. Each button describes itself with data-* attributes, and app.js
+          uses ONE click listener on the keypad (event delegation) to handle all of them.
+        -->
+        <div id="keypad" class="keypad">
+          <button type="button" class="key key-function" data-action="clear" aria-label="All clear">AC</button>
+          <button type="button" class="key key-function" data-action="backspace" aria-label="Delete last digit">C</button>
+          <button type="button" class="key key-function" data-action="percent" aria-label="Percent">%</button>
+          <button type="button" class="key key-operator" data-action="operator" data-operator="/" aria-label="Divide">÷</button>
+
+          <button type="button" class="key" data-action="digit" data-digit="7" aria-label="7">7</button>
+          <button type="button" class="key" data-action="digit" data-digit="8" aria-label="8">8</button>
+          <button type="button" class="key" data-action="digit" data-digit="9" aria-label="9">9</button>
+          <button type="button" class="key key-operator" data-action="operator" data-operator="*" aria-label="Multiply">×</button>
+
+          <button type="button" class="key" data-action="digit" data-digit="4" aria-label="4">4</button>
+          <button type="button" class="key" data-action="digit" data-digit="5" aria-label="5">5</button>
+          <button type="button" class="key" data-action="digit" data-digit="6" aria-label="6">6</button>
+          <button type="button" class="key key-operator" data-action="operator" data-operator="-" aria-label="Subtract">−</button>
+
+          <button type="button" class="key" data-action="digit" data-digit="1" aria-label="1">1</button>
+          <button type="button" class="key" data-action="digit" data-digit="2" aria-label="2">2</button>
+          <button type="button" class="key" data-action="digit" data-digit="3" aria-label="3">3</button>
+          <button type="button" class="key key-operator" data-action="operator" data-operator="+" aria-label="Add">+</button>
+
+          <button type="button" class="key" data-action="sign" aria-label="Toggle positive or negative">±</button>
+          <button type="button" class="key" data-action="digit" data-digit="0" aria-label="0">0</button>
+          <button type="button" class="key" data-action="decimal" aria-label="Decimal point">.</button>
+          <button type="button" class="key key-equals" data-action="equals" aria-label="Equals">=</button>
+        </div>
+      </section>
+
+      <aside class="history" aria-labelledby="history-title">
+        <div class="history-header">
+          <h2 id="history-title" class="history-title">Історія</h2>
+          <button id="clear-history" class="text-button" type="button" aria-label="Clear history">
+            Очистити історію
+          </button>
+        </div>
+        <p id="history-empty" class="history-empty">Обчислень ще немає.</p>
+        <!-- Newest first. Each item is a button that loads its result back into the calculator. -->
+        <ol id="history-list" class="history-list"></ol>
+      </aside>
+
+      <p class="hint">
+        Клавіатура: <kbd>0–9</kbd> <kbd>.</kbd> <kbd>+</kbd> <kbd>-</kbd> <kbd>*</kbd> <kbd>/</kbd>
+        <kbd>%</kbd> <kbd>Enter</kbd> <kbd>Backspace</kbd> <kbd>Esc</kbd>
+      </p>
+    </main>
+
+    <noscript>
+      <p class="noscript">This calculator needs JavaScript enabled to work.</p>
+    </noscript>
+  </body>
+</html>

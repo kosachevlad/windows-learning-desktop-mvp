@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Calculator body -->
+  <rect x="8" y="4" width="48" height="56" rx="10" fill="#1d4ed8"/>
+  <!-- Screen -->
+  <rect x="15" y="11" width="34" height="13" rx="3" fill="#e0e7ff"/>
+  <!-- Keys -->
+  <g fill="#ffffff">
+    <rect x="15" y="30" width="9" height="9" rx="2"/>
+    <rect x="27.5" y="30" width="9" height="9" rx="2"/>
+    <rect x="15" y="44" width="9" height="9" rx="2"/>
+    <rect x="27.5" y="44" width="9" height="9" rx="2"/>
+  </g>
+  <rect x="40" y="30" width="9" height="23" rx="2" fill="#fb923c"/>
+</svg>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Календар</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="card" role="application" aria-label="Календар">
+    <div class="calendar-toolbar">
+      <button class="month-btn prev" aria-label="Попередній місяць">‹</button>
+      <div class="current-month" aria-live="polite"></div>
+      <button class="month-btn next" aria-label="Наступний місяць">›</button>
+    </div>
+
+    <div class="calendar">
+      <div class="weekdays" aria-hidden="true">
+        <div class="weekday-name">Нд</div>
+        <div class="weekday-name">Пн</div>
+        <div class="weekday-name">Вт</div>
+        <div class="weekday-name">Ср</div>
+        <div class="weekday-name">Чт</div>
+        <div class="weekday-name">Пт</div>
+        <div class="weekday-name">Сб</div>
+      </div>
+      <div class="calendar-days" role="grid" aria-label="Calendar days"></div>
+    </div>
+
+    <div style="display:flex;justify-content:center;padding:10px 0;">
+      <button id="openAddEvent" class="btn">Додати подію</button>
+    </div>
+
+    <div class="goto-buttons">
+      <button type="button" class="btn prev-year" aria-label="Попередній рік">Попередній рік</button>
+      <button type="button" class="btn today" aria-label="Сьогодні">Сьогодні</button>
+      <button type="button" class="btn next-year" aria-label="Наступний рік">Наступний рік</button>
+    </div>
+  </div>
+
+  <!-- Modal for adding/editing events and viewing day events -->
+  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h4 id="modalTitle">Додати подію</h4>
+
+      <form id="eventForm">
+        <div class="field">
+          <label>Дата</label>
+          <input type="date" id="eventDate" required />
+        </div>
+
+        <div class="field">
+          <label>Назва</label>
+          <input type="text" id="eventTitle" required />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="cancelEvent" class="btn">Скасувати</button>
+          <button type="submit" class="btn">Зберегти</button>
+        </div>
+      </form>
+
+      <div id="dayEventsContainer" style="display:none;">
+        <h4 id="dayLabel">Події</h4>
+        <div class="event-list" id="eventList"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+          <button id="closeDayEvents" class="btn">Закрити</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
+

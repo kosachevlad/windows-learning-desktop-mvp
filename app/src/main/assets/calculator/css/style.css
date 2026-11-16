@@ -1,0 +1,485 @@
+/* =============================================================================
+   style.css
+   -----------------------------------------------------------------------------
+   1. Design tokens (CSS custom properties) for light and dark themes
+   2. Base / reset
+   3. Layout
+   4. Display
+   5. Keypad
+   6. History panel
+   7. Utilities and reduced motion
+   All colour pairs were chosen to meet WCAG AA contrast (4.5:1 for text).
+   ============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   1. Design tokens
+   Components only use these variables, so switching theme = swapping values.
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --color-bg: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-text: #1a1c20;
+  --color-text-muted: #4b5160; /* 7.9:1 on white */
+  --color-border: #d5d9e0;
+
+  --color-key: #f0f2f5;
+  --color-key-hover: #e3e6eb;
+  --color-key-text: #1a1c20;
+  --color-key-function: #dde1e8;
+  --color-key-function-hover: #cdd2db;
+  --color-operator: #1d4ed8; /* white text on this: 6.7:1 */
+  --color-operator-hover: #1e40af;
+  --color-operator-text: #ffffff;
+  --color-equals: #c2410c; /* white text on this: 5.2:1 */
+  --color-equals-hover: #9a3412;
+  --color-equals-text: #ffffff;
+
+  --color-error: #b91c1c;
+  --color-focus: #2563eb;
+
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --shadow: 0 10px 30px rgb(15 23 42 / 0.08), 0 2px 6px rgb(15 23 42 / 0.06);
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --key-size: clamp(52px, 15vw, 72px); /* always ≥ 48px tap target */
+}
+
+/* Dark values. Used when the user picked dark, OR when they haven't picked
+   anything and their operating system is in dark mode. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #0f1115;
+  --color-surface: #1a1d23;
+  --color-text: #f2f4f7;
+  --color-text-muted: #a4abb8; /* 7.4:1 on surface */
+  --color-border: #2e333d;
+
+  --color-key: #262a32;
+  --color-key-hover: #313641;
+  --color-key-text: #f2f4f7;
+  --color-key-function: #3a404c;
+  --color-key-function-hover: #474e5c;
+  --color-operator: #60a5fa; /* dark text on this: 8.1:1 */
+  --color-operator-hover: #93c5fd;
+  --color-operator-text: #0b1220;
+  --color-equals: #fb923c; /* dark text on this: 8.6:1 */
+  --color-equals-hover: #fdba74;
+  --color-equals-text: #0b1220;
+
+  --color-error: #fca5a5;
+  --color-focus: #93c5fd;
+
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-bg: #0f1115;
+    --color-surface: #1a1d23;
+    --color-text: #f2f4f7;
+    --color-text-muted: #a4abb8;
+    --color-border: #2e333d;
+
+    --color-key: #262a32;
+    --color-key-hover: #313641;
+    --color-key-text: #f2f4f7;
+    --color-key-function: #3a404c;
+    --color-key-function-hover: #474e5c;
+    --color-operator: #60a5fa;
+    --color-operator-hover: #93c5fd;
+    --color-operator-text: #0b1220;
+    --color-equals: #fb923c;
+    --color-equals-hover: #fdba74;
+    --color-equals-text: #0b1220;
+
+    --color-error: #fca5a5;
+    --color-focus: #93c5fd;
+
+    --shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   2. Base / reset
+   --------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: var(--native-viewport-height, 100dvh);
+  font-family: var(--font);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent; /* we provide our own press feedback */
+}
+
+/* A clearly visible focus ring for keyboard users only. */
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+h1,
+h2 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* ---------------------------------------------------------------------------
+   3. Layout
+   Mobile first: everything stacks. From 820px the history sits beside the
+   calculator.
+   --------------------------------------------------------------------------- */
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+
+.theme-toggle:hover {
+  background: var(--color-key-hover);
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Show the moon in light mode and the sun in dark mode. */
+.icon-sun {
+  display: none;
+}
+:root[data-theme='dark'] .icon-sun {
+  display: block;
+}
+:root[data-theme='dark'] .icon-moon {
+  display: none;
+}
+
+.calculator,
+.history {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.calculator {
+  padding: 16px;
+}
+
+@media (min-width: 820px) {
+  .app {
+    max-width: 780px;
+    grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+    grid-template-areas:
+      'header header'
+      'calc   history'
+      'hint   hint';
+    align-items: start;
+    padding-top: 48px;
+  }
+  .app-header {
+    grid-area: header;
+  }
+  .calculator {
+    grid-area: calc;
+  }
+  .history {
+    grid-area: history;
+    height: 100%;
+  }
+  .hint {
+    grid-area: hint;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   4. Display
+   --------------------------------------------------------------------------- */
+.display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 4px;
+  min-height: 120px;
+  padding: 12px 8px 16px;
+  text-align: right;
+}
+
+.display-expression {
+  min-height: 1.5em; /* keep height stable when empty */
+  max-width: 100%;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.display-result {
+  display: block;
+  max-width: 100%;
+  font-size: 3rem;
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere; /* never overflow horizontally */
+}
+
+/* app.js sets data-size based on the length of the value. */
+.display-result[data-size='sm'] {
+  font-size: 2.25rem;
+}
+.display-result[data-size='xs'] {
+  font-size: 1.625rem;
+}
+
+.display-result.is-error {
+  font-size: 1.75rem;
+  color: var(--color-error);
+}
+
+/* ---------------------------------------------------------------------------
+   5. Keypad
+   --------------------------------------------------------------------------- */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.key {
+  min-width: 48px;
+  min-height: 48px;
+  height: var(--key-size);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-key);
+  color: var(--color-key-text);
+  font-size: 1.5rem;
+  font-weight: 500;
+  user-select: none;
+  touch-action: manipulation; /* removes the 300ms double-tap delay on mobile */
+  transition: background-color 0.12s ease, transform 0.08s ease, filter 0.12s ease;
+}
+
+.key:hover {
+  background: var(--color-key-hover);
+}
+
+.key-function {
+  background: var(--color-key-function);
+  font-size: 1.25rem;
+}
+.key-function:hover {
+  background: var(--color-key-function-hover);
+}
+
+.key-operator {
+  background: var(--color-operator);
+  color: var(--color-operator-text);
+  font-size: 1.75rem;
+}
+.key-operator:hover {
+  background: var(--color-operator-hover);
+}
+
+.key-equals {
+  background: var(--color-equals);
+  color: var(--color-equals-text);
+  font-size: 1.75rem;
+}
+.key-equals:hover {
+  background: var(--color-equals-hover);
+}
+
+/* Press feedback: :active for mouse/touch, .is-pressed is added by app.js for
+   keyboard input. */
+.key:active,
+.key.is-pressed {
+  transform: scale(0.94);
+  filter: brightness(0.9);
+}
+
+/* ---------------------------------------------------------------------------
+   6. History panel
+   --------------------------------------------------------------------------- */
+.history {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  min-width: 0;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.history-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.text-button {
+  min-height: 48px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.text-button:hover:not(:disabled) {
+  background: var(--color-key);
+  color: var(--color-text);
+}
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.history-empty {
+  margin: 8px 0;
+  color: var(--color-text-muted);
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.history-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.history-item:hover {
+  background: var(--color-key);
+}
+.history-item:active {
+  background: var(--color-key-hover);
+}
+
+.history-expression {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.history-result {
+  font-size: 1.25rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Utilities
+   --------------------------------------------------------------------------- */
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 2px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: 0.8125rem;
+}
+
+.noscript {
+  margin: 16px;
+  text-align: center;
+}
+
+/* Hide the keyboard hint on touch-only devices where it isn't useful. */
+@media (hover: none) and (pointer: coarse) {
+  .hint {
+    display: none;
+  }
+}
+
+/* Respect users who ask the OS to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+}
