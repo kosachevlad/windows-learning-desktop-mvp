@@ -75,7 +75,8 @@ private sealed interface AppScreen {
     data object SharedFolder : AppScreen
     data class Notepad(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object WordHome : AppScreen
-    data object Word2 : AppScreen
+    data class Word2(val fileId: String? = null) : AppScreen
+    data object Settings : AppScreen
     data class Word(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data class Paint(val fileId: String? = null, val returnFolderId: String? = null) : AppScreen
     data object ThisPc : AppScreen
@@ -85,6 +86,8 @@ private sealed interface AppScreen {
     data class Photo(val fileId: String) : AppScreen
     data class Music(val fileId: String) : AppScreen
 }
+
+private enum class WordMode { BOTH, WORD_1, WORD_2 }
 
 @Composable
 fun WindowsLearningDesktopApp(
@@ -101,6 +104,10 @@ fun WindowsLearningDesktopApp(
     var showLoader by remember { mutableStateOf(false) }
     var loaderRequest by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val wordPreferences = remember(context) { context.getSharedPreferences("word_settings", android.content.Context.MODE_PRIVATE) }
+    var wordMode by remember { mutableStateOf(runCatching { WordMode.valueOf(wordPreferences.getString("mode", WordMode.BOTH.name) ?: WordMode.BOTH.name) }.getOrDefault(WordMode.BOTH)) }
+    fun setWordMode(mode: WordMode) { wordMode = mode; wordPreferences.edit().putString("mode", mode.name).apply() }
+    fun wordFileScreen(id: String): AppScreen = if (wordMode == WordMode.WORD_2) AppScreen.Word2(id) else AppScreen.Word(id)
     val sharedFolder = remember { SharedFolderRepository(context) }
     var sharedRefresh by remember { mutableIntStateOf(0) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -161,10 +168,10 @@ fun WindowsLearningDesktopApp(
     }
     MaterialTheme {
         Box(Modifier.fillMaxSize()) {
-        if (screen == AppScreen.Word2) {
+        if (screen is AppScreen.Word2) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    Word2Screen(repository, nodes, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                    Word2Screen(repository, nodes, (screen as AppScreen.Word2).fileId, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
                 }
                 Taskbar(
                     keyboardLanguage = keyboardLanguage,
@@ -175,8 +182,9 @@ fun WindowsLearningDesktopApp(
                     onPaint = { open(AppScreen.Paint()) },
                     onBrowser = { open(AppScreen.Browser) },
                     onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
-                    onWord = { open(AppScreen.WordHome) },
-                    onWord2 = { open(AppScreen.Word2) },
+                    onWord = { open(if (wordMode == WordMode.WORD_2) AppScreen.Word2() else AppScreen.WordHome) },
+                    onWord2 = { open(AppScreen.Word2()) },
+                    onSettings = { open(AppScreen.Settings) }, wordMode = wordMode,
                     onShowLoading = ::showLoading,
                 )
             }
@@ -197,7 +205,7 @@ fun WindowsLearningDesktopApp(
                         onBrowser = { open(AppScreen.Browser) },
                         onFolder = { open(AppScreen.Explorer(it)) },
                         onText = { open(AppScreen.Notepad(it)) },
-                        onWord = { open(AppScreen.Word(it)) },
+                        onWord = { open(wordFileScreen(it)) },
                         onPaintFile = { open(AppScreen.Paint(it)) },
                         onShowLoading = ::showLoading,
                         onError = { error = it },
@@ -206,7 +214,7 @@ fun WindowsLearningDesktopApp(
                     )
                     is AppScreen.Explorer -> ExplorerScreen(repository, sharedFolder, current.folderId, nodes,
                         onFolder = { open(AppScreen.Explorer(it)) }, onText = { open(AppScreen.Notepad(it, returnFolderId = current.folderId)) },
-                        onWord = { open(AppScreen.Word(it, returnFolderId = current.folderId)) },
+                        onWord = { open(if (wordMode == WordMode.WORD_2) AppScreen.Word2(it) else AppScreen.Word(it, returnFolderId = current.folderId)) },
                         onPaint = { open(AppScreen.Paint(it, returnFolderId = current.folderId)) },
                         onPhoto = { open(AppScreen.Photo(it)) },
                         onMusic = { open(AppScreen.Music(it)) },
@@ -224,7 +232,8 @@ fun WindowsLearningDesktopApp(
                         onNew = { open(AppScreen.Word()) },
                         onOpen = { open(AppScreen.Word(it)) },
                     )
-                    AppScreen.Word2 -> Word2Screen(repository, nodes, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                    is AppScreen.Word2 -> Word2Screen(repository, nodes, current.fileId, onClose = { open(AppScreen.Desktop) }, onError = { error = it })
+                    AppScreen.Settings -> WordSettingsScreen(wordMode, ::setWordMode, onClose = { open(AppScreen.Desktop) })
                     is AppScreen.Word -> WordEditorScreen(repository, current.fileId?.let(snapshot.nodes::get), snapshot.nodes.values,
                         onHome = { open(AppScreen.WordHome) },
                         onClose = { open(current.returnFolderId?.let { AppScreen.Explorer(it) } ?: AppScreen.Desktop) },
@@ -265,8 +274,9 @@ fun WindowsLearningDesktopApp(
                 onPaint = { open(AppScreen.Paint()) },
                 onBrowser = { open(AppScreen.Browser) },
                 onMusic = { open(AppScreen.Music(nodes.firstOrNull { it.name.endsWith(".mp3", true) }?.id ?: "")) },
-                onWord = { open(AppScreen.WordHome) },
-                onWord2 = { open(AppScreen.Word2) },
+                onWord = { open(if (wordMode == WordMode.WORD_2) AppScreen.Word2() else AppScreen.WordHome) },
+                onWord2 = { open(AppScreen.Word2()) },
+                onSettings = { open(AppScreen.Settings) }, wordMode = wordMode,
                 onShowLoading = ::showLoading,
             )
         }
@@ -276,6 +286,33 @@ fun WindowsLearningDesktopApp(
         error?.let { message -> AlertDialog(onDismissRequest = { error = null },
             title = { Text(stringResource(R.string.error_title)) }, text = { Text(message) },
             confirmButton = { TextButton(onClick = { error = null }) { Text(stringResource(R.string.ok)) } }) }
+        }
+    }
+}
+
+@Composable private fun WordSettingsScreen(mode: WordMode, onModeChange: (WordMode) -> Unit, onClose: () -> Unit) {
+    var showWordOptions by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().background(Color(0xFFF4F6FA))) {
+        WindowTitle("Налаштування", onClose)
+        Text("Налаштування", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(24.dp))
+        Card(onClick = { showWordOptions = !showWordOptions }, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Image(painterResource(R.drawable.start_word), null, Modifier.size(32.dp))
+                Text("Word", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 14.dp).weight(1f))
+                Text(if (showWordOptions) "⌃" else "⌄")
+            }
+        }
+        if (showWordOptions) {
+            listOf(
+                WordMode.BOTH to "Використовувати обидві версії",
+                WordMode.WORD_1 to "Використовувати Word 1.0",
+                WordMode.WORD_2 to "Використовувати Word 2.0",
+            ).forEach { (option, label) ->
+                Row(Modifier.fillMaxWidth().clickable { onModeChange(option) }.padding(horizontal = 30.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = mode == option, onClick = { onModeChange(option) })
+                    Text(label, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
         }
     }
 }
@@ -291,6 +328,8 @@ fun WindowsLearningDesktopApp(
     onMusic: () -> Unit,
     onWord: () -> Unit,
     onWord2: () -> Unit,
+    onSettings: () -> Unit,
+    wordMode: WordMode,
     onShowLoading: () -> Unit,
 ) {
     var languageMenu by remember { mutableStateOf(false) }
@@ -330,9 +369,12 @@ fun WindowsLearningDesktopApp(
                     StartApp("Paint", R.drawable.paint) { startMenu = false; onPaint() },
                     StartApp("PowerPoint", R.drawable.start_powerpoint),
                     StartApp("Робочий стіл", R.drawable.start_btn) { startMenu = false; onDesktop() },
-                    StartApp("Word", R.drawable.start_word) { startMenu = false; onWord() },
-                    StartApp("Word 2.0", R.drawable.start_word) { startMenu = false; onWord2() },
-                    ).sortedBy { it.name.lowercase() }.forEach { app ->
+                    StartApp("Налаштування", R.drawable.start_settings) { startMenu = false; onSettings() },
+                    ).plus(when (wordMode) {
+                        WordMode.BOTH -> listOf(StartApp("Word 1.0", R.drawable.start_word) { startMenu = false; onWord() }, StartApp("Word 2.0", R.drawable.start_word) { startMenu = false; onWord2() })
+                        WordMode.WORD_1 -> listOf(StartApp("Word", R.drawable.start_word) { startMenu = false; onWord() })
+                        WordMode.WORD_2 -> listOf(StartApp("Word", R.drawable.start_word) { startMenu = false; onWord2() })
+                    }).sortedBy { it.name.lowercase() }.forEach { app ->
                     DropdownMenuItem(
                         text = { Text(app.name) },
                         leadingIcon = { Icon(painterResource(app.icon), null, Modifier.size(28.dp), tint = Color.Unspecified) },

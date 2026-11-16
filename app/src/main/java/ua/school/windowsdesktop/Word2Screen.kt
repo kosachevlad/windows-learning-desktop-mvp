@@ -92,6 +92,7 @@ private fun WebView.updateWord2ViewportHeight() {
 internal fun Word2Screen(
     repository: LearningFileRepository,
     nodes: List<FileNode>,
+    initialFileId: String? = null,
     onClose: () -> Unit,
     onError: (String) -> Unit,
 ) {
@@ -131,6 +132,13 @@ internal fun Word2Screen(
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
                         view?.updateWord2ViewportHeight()
+                        val document = nodes.firstOrNull { it.id == initialFileId && it.kind == FileKind.TEXT && it.name.endsWith(".docx", true) }
+                        if (document != null) scope.launch {
+                            runCatching {
+                                val data = Base64.encodeToString(repository.readTextBytes(document.id), Base64.NO_WRAP)
+                                view?.evaluateJavascript("window.word2OpenFromApp(${org.json.JSONObject.quote(document.name)},${org.json.JSONObject.quote(data)})", null)
+                            }.onFailure { onError(it.message ?: "Не вдалося відкрити документ") }
+                        }
                     }
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
                         val uri = request.url
