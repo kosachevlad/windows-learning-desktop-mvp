@@ -26,6 +26,24 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.*
 
 private data class DesktopPosition(val x: Float, val y: Float)
+internal enum class NewItemKind { FOLDER, TEXT, PAINT, WORD }
+
+@Composable internal fun EmptySpaceContextMenu(onDismiss: () -> Unit, onCreate: (NewItemKind) -> Unit) {
+    var createExpanded by remember { mutableStateOf(false) }
+    DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
+        DropdownMenuItem(text = { Text("Вигляд") }, onClick = {})
+        DropdownMenuItem(text = { Text("Оновити") }, onClick = {})
+        Box {
+            DropdownMenuItem(text = { Text("Створити  ▸") }, onClick = { createExpanded = true })
+            DropdownMenu(expanded = createExpanded, onDismissRequest = { createExpanded = false }, offset = androidx.compose.ui.unit.DpOffset(230.dp, (-48).dp)) {
+                listOf(NewItemKind.FOLDER to "Папку", NewItemKind.TEXT to "Текстовий документ", NewItemKind.PAINT to "Точковий рисунок", NewItemKind.WORD to "Документ Word").forEach { (kind, label) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { createExpanded = false; onCreate(kind) })
+                }
+            }
+        }
+        DropdownMenuItem(text = { Text("Параметри") }, onClick = {})
+    }
+}
 private data class DesktopProperties(val name: String, val type: String)
 private data class SystemShortcut(
     val id: String,
@@ -60,7 +78,7 @@ internal fun DesktopScreen(
     val scope = rememberCoroutineScope()
     var positions by remember { mutableStateOf(loadDesktopPositions(context)) }
     var backgroundMenu by remember { mutableStateOf<Offset?>(null) }
-    var createKind by remember { mutableStateOf<FileKind?>(null) }
+    var createKind by remember { mutableStateOf<NewItemKind?>(null) }
     var createPosition by remember { mutableStateOf(Offset.Zero) }
     var newName by remember { mutableStateOf("") }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -79,13 +97,14 @@ internal fun DesktopScreen(
         FileKind.TEXT -> if (node.name.endsWith(".docx", true)) onWord(node.id) else onText(node.id)
         FileKind.PAINT -> onPaintFile(node.id)
     }
-    fun submitCreate(kind: FileKind) {
+    fun submitCreate(kind: NewItemKind) {
         if (newName.isBlank()) return
         scope.launch { try {
             val node = when (kind) {
-                FileKind.FOLDER -> repository.createFolder(newName, FileOperations.ROOT_ID)
-                FileKind.TEXT -> repository.createText(newName, FileOperations.ROOT_ID)
-                FileKind.PAINT -> repository.createPaint(newName, FileOperations.ROOT_ID, blankPaintPng())
+                NewItemKind.FOLDER -> repository.createFolder(newName, FileOperations.ROOT_ID)
+                NewItemKind.TEXT -> repository.createText(newName, FileOperations.ROOT_ID)
+                NewItemKind.PAINT -> repository.createPaint(newName, FileOperations.ROOT_ID, blankPaintPng())
+                NewItemKind.WORD -> repository.createTextBytes("${newName.removeSuffix(".docx")}.docx", FileOperations.ROOT_ID, DocxFormat.write(""))
             }
             val updated = positions + (node.id to DesktopPosition(createPosition.x, createPosition.y))
             positions = updated; saveDesktopPositions(context, updated); selectedId = node.id; createKind = null
@@ -143,11 +162,8 @@ internal fun DesktopScreen(
         }
 
         backgroundMenu?.let { point -> Box(Modifier.offset { IntOffset(point.x.roundToInt(), point.y.roundToInt()) }.size(1.dp)) {
-            DropdownMenu(true, { backgroundMenu = null }) {
-                fun begin(kind: FileKind) { createPosition = point; createKind = kind; newName = ""; backgroundMenu = null }
-                DropdownMenuItem({ Text(stringResource(R.string.new_folder)) }, { begin(FileKind.FOLDER) })
-                DropdownMenuItem({ Text(stringResource(R.string.new_text_document)) }, { begin(FileKind.TEXT) })
-                DropdownMenuItem({ Text(stringResource(R.string.new_bitmap_image)) }, { begin(FileKind.PAINT) })
+            EmptySpaceContextMenu(onDismiss = { backgroundMenu = null }) { kind ->
+                createPosition = point; createKind = kind; newName = ""; backgroundMenu = null
             }
         } }
     }
@@ -155,7 +171,7 @@ internal fun DesktopScreen(
     createKind?.let { kind -> AlertDialog(
         modifier = Modifier.dialogKeys(newName.isNotBlank(), { submitCreate(kind) }, { createKind = null }),
         onDismissRequest = { createKind = null },
-        title = { Text(when (kind) { FileKind.FOLDER -> stringResource(R.string.new_folder); FileKind.TEXT -> stringResource(R.string.new_text_document); FileKind.PAINT -> stringResource(R.string.new_bitmap_image) }) },
+        title = { Text(when (kind) { NewItemKind.FOLDER -> stringResource(R.string.new_folder); NewItemKind.TEXT -> stringResource(R.string.new_text_document); NewItemKind.PAINT -> stringResource(R.string.new_bitmap_image); NewItemKind.WORD -> "Документ Word" }) },
         text = { OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
         confirmButton = { TextButton({ submitCreate(kind) }, enabled = newName.isNotBlank()) { Text(stringResource(R.string.create)) } },
         dismissButton = { TextButton({ createKind = null }) { Text(stringResource(R.string.cancel)) } },

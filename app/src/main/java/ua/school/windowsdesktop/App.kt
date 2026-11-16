@@ -632,7 +632,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     onSharedFolder: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var createKind by remember { mutableStateOf<FileKind?>(null) }
+    var createKind by remember { mutableStateOf<NewItemKind?>(null) }
     var newName by remember { mutableStateOf("") }
     var selectedId by remember(folderId) { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<FileNode?>(null) }
@@ -671,11 +671,12 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
     } } }
     fun copySelected() { selected?.let { node -> scope.launch { try { repository.copy(node.id); onClipboardReady(true) } catch (failure: Exception) { onError(errorMessage(failure)) } } } }
     fun paste() { scope.launch { try { repository.paste(folderId); selectedId = null } catch (failure: Exception) { onError(errorMessage(failure)) } } }
-    fun submitCreate(kind: FileKind) { if (newName.isBlank()) return else scope.launch { try {
+    fun submitCreate(kind: NewItemKind) { if (newName.isBlank()) return else scope.launch { try {
         val created = when (kind) {
-            FileKind.FOLDER -> repository.createFolder(newName, folderId)
-            FileKind.TEXT -> repository.createText(newName, folderId)
-            FileKind.PAINT -> repository.createPaint(newName, folderId, blankPaintPng())
+            NewItemKind.FOLDER -> repository.createFolder(newName, folderId)
+            NewItemKind.TEXT -> repository.createText(newName, folderId)
+            NewItemKind.PAINT -> repository.createPaint(newName, folderId, blankPaintPng())
+            NewItemKind.WORD -> repository.createTextBytes("${newName.removeSuffix(".docx")}.docx", folderId, DocxFormat.write(""))
         }
         selectedId = created.id
         pendingRevealId = created.id
@@ -720,7 +721,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
             TextButton(onClick = onSharedFolder) { Text("Спільні файли Android") }
             Spacer(Modifier.weight(1f))
             IconButton(
-                onClick = { createKind = FileKind.FOLDER; newName = "" },
+                onClick = { createKind = NewItemKind.FOLDER; newName = "" },
                 modifier = Modifier.size(52.dp),
             ) {
                 Box(Modifier.fillMaxSize()) {
@@ -729,7 +730,7 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                 }
             }
             IconButton(
-                onClick = { createKind = FileKind.TEXT; newName = "" },
+                onClick = { createKind = NewItemKind.TEXT; newName = "" },
                 modifier = Modifier.size(52.dp),
             ) {
                 Box(Modifier.fillMaxSize()) {
@@ -813,42 +814,10 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
                         }
                         .size(1.dp)
                 ) {
-                    DropdownMenu(
-                        expanded = true,
-                        onDismissRequest = { backgroundMenuPosition = null },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.new_folder)) },
-                            onClick = {
-                                backgroundMenuPosition = null
-                                createKind = FileKind.FOLDER
-                                newName = ""
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.new_text_document)) },
-                            onClick = {
-                                backgroundMenuPosition = null
-                                createKind = FileKind.TEXT
-                                newName = ""
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.new_bitmap_image)) },
-                            onClick = {
-                                backgroundMenuPosition = null
-                                createKind = FileKind.PAINT
-                                newName = ""
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.paste)) },
-                            enabled = clipboardReady,
-                            onClick = {
-                                backgroundMenuPosition = null
-                                paste()
-                            },
-                        )
+                    EmptySpaceContextMenu(onDismiss = { backgroundMenuPosition = null }) { kind ->
+                        backgroundMenuPosition = null
+                        createKind = kind
+                        newName = ""
                     }
                 }
             }
@@ -859,9 +828,10 @@ private fun nextBrowserDownloadName(original: String, existing: List<FileNode>):
         modifier = Modifier.dialogKeys(newName.isNotBlank(), { submitCreate(kind) }, { createKind = null }),
         onDismissRequest = { createKind = null },
         title = { Text(when (kind) {
-            FileKind.FOLDER -> stringResource(R.string.new_folder)
-            FileKind.TEXT -> stringResource(R.string.new_text_document)
-            FileKind.PAINT -> stringResource(R.string.new_bitmap_image)
+            NewItemKind.FOLDER -> stringResource(R.string.new_folder)
+            NewItemKind.TEXT -> stringResource(R.string.new_text_document)
+            NewItemKind.PAINT -> stringResource(R.string.new_bitmap_image)
+            NewItemKind.WORD -> "Документ Word"
         }) },
         text = { OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text(stringResource(R.string.name)) }) },
         confirmButton = { TextButton(enabled = newName.isNotBlank(), onClick = { submitCreate(kind) }) { Text(stringResource(R.string.create)) } },
