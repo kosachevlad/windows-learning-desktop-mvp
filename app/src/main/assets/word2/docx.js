@@ -279,6 +279,8 @@ const Docx = (() => {
     function paragraph(block,num=null,children=[...block.childNodes]) {
       const properties = [];
       if (num) properties.push("<w:numPr>"+tag("ilvl",num.level)+tag("numId",num.id)+"</w:numPr>");
+      const marginLeft = parseFloat(block.style?.marginLeft);
+      if (marginLeft > 0) properties.push('<w:ind w:left="'+Math.round(marginLeft*15)+'"/>');
       const spacing = block.style?.lineHeight;
       if (spacing) {
         const value = parseFloat(spacing);
@@ -304,7 +306,7 @@ const Docx = (() => {
       lists.push({id,levels});
       function flatten(group,depth) {
         const level = Math.min(depth,8);
-        levels[level] ||= {bullet:group.tagName === "UL",multi:group.hasAttribute("data-multilevel"),start:Math.max(1,group.start||1)};
+        levels[level] ||= {bullet:group.tagName === "UL",marker:group.dataset.marker || "disc",numberFormat:group.dataset.numberFormat || ({a:"lower-alpha",A:"upper-alpha",i:"lower-roman",I:"upper-roman"})[group.type] || "decimal",multiStyle:group.dataset.multilevelStyle || (group.hasAttribute("data-multilevel") ? "hierarchical" : ""),start:Math.max(1,group.start||1)};
         let output = "";
         for (const item of group.children) {
           if (item.matches("ul,ol")) {
@@ -386,10 +388,14 @@ const Docx = (() => {
     const sections = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>';
     files.set("word/document.xml",xmlHead+'<w:document'+ns+'><w:body>'+content+sections+"</w:body></w:document>");
     const definitions = lists.map(({id,levels}) => '<w:abstractNum w:abstractNumId="'+id+'">'+tag("multiLevelType","multilevel")+
-      Array.from({length:levels.length},(_,level) => {
-        const {bullet,multi,start} = levels[level] || levels[0];
-        const label = bullet ? "•" : multi ? Array.from({length:level+1},(_,n) => "%"+(n+1)+".").join("") : "%"+(level+1)+".";
-        return '<w:lvl w:ilvl="'+level+'">'+tag("start",start)+tag("numFmt",bullet?"bullet":"decimal")+tag("lvlText",label)+tag("lvlJc","left")+
+      Array.from({length:levels[0]?.multiStyle ? Math.max(3,levels.length) : levels.length},(_,level) => {
+        const {bullet,marker,numberFormat,multiStyle,start} = levels[level] || levels[0];
+        const markerText = ({disc:"•",circle:"○",square:"■",plus:"✣",diamond:"❖",arrow:"➤",check:"✓"})[marker] || "•";
+        const multiFormats = ["decimal","lower-alpha","lower-roman"];
+        const format = multiStyle === "symbols" ? "bullet" : multiStyle && multiStyle !== "hierarchical" ? multiFormats[level%3] : bullet ? "bullet" : numberFormat.replace(/-paren$/,"");
+        const wordFormat = ({"lower-alpha":"lowerLetter","upper-alpha":"upperLetter","lower-roman":"lowerRoman","upper-roman":"upperRoman"})[format] || format;
+        const label = multiStyle === "symbols" ? ["❖","➤","▪"][level%3] : bullet ? markerText : multiStyle === "hierarchical" ? Array.from({length:level+1},(_,n) => "%"+(n+1)+".").join("") : "%"+(level+1)+(multiStyle === "paren" || numberFormat.endsWith("-paren") ? ")" : ".");
+        return '<w:lvl w:ilvl="'+level+'">'+tag("start",start)+tag("numFmt",wordFormat)+tag("lvlText",label)+tag("lvlJc","left")+
           '<w:pPr><w:tabs><w:tab w:val="num" w:pos="'+(level+1)*400+'"/></w:tabs><w:ind w:left="'+(level+1)*400+'" w:hanging="360"/></w:pPr></w:lvl>';
       }).join("")+"</w:abstractNum>").join("");
     files.set("word/numbering.xml",xmlHead+'<w:numbering xmlns:w="'+W+'">'+definitions+
@@ -447,6 +453,9 @@ const Docx = (() => {
   }
   function paraProps(target,node) {
     if (!node) return;
+    const indent = child(node,"ind");
+    const left = +(attr(indent,"left") || attr(indent,"start"));
+    if (left > 0) target.style.marginLeft = left/15+"px";
     const align = ({left:"left",right:"right",center:"center",both:"justify",start:"left",end:"right",distribute:"justify"})[value(node,"jc")];
     if (align) target.style.textAlign = align;
     const spacing = child(node,"spacing");
@@ -618,9 +627,16 @@ const Docx = (() => {
       const spec = child(override,"lvl") || children(group).find(item => item.localName === "lvl" && +attr(item,"ilvl") === level);
       const format = value(spec,"numFmt");
       const formatType = ({lowerLetter:"a",upperLetter:"A",lowerRoman:"i",upperRoman:"I"})[format];
-      const multi = children(group).some(item => (value(item,"lvlText").match(/%[1-9]/g)||[]).length > 1);
+      const levels = children(group).filter(item => item.localName === "lvl");
+      const labels = levels.map(item => value(item,"lvlText"));
+      const hierarchical = labels.some(label => (label.match(/%[1-9]/g)||[]).length > 1);
+      const symbols = levels.length > 1 && levels.every(item => value(item,"numFmt") === "bullet") && new Set(labels).size > 1;
+      const multi = hierarchical || symbols || levels.length > 1 && new Set(levels.map(item => value(item,"numFmt"))).size > 1;
+      const multiStyle = hierarchical ? "hierarchical" : symbols ? "symbols" : labels[0]?.endsWith(")") ? "paren" : "outline";
+      const marker = ({"•":"disc","○":"circle","■":"square","✣":"plus","❖":"diamond","➤":"arrow","✓":"check"})[value(spec,"lvlText")] || "disc";
+      const numberFormat = ({decimal:"decimal",lowerLetter:"lower-alpha",upperLetter:"upper-alpha",lowerRoman:"lower-roman",upperRoman:"upper-roman"})[format] || "decimal";
       const start = +(value(override,"startOverride") || value(spec,"start")) || 1;
-      return {type:format === "bullet" ? "ul" : "ol",formatType,multi,start};
+      return {type:format === "bullet" && !symbols ? "ul" : "ol",formatType,multi,multiStyle,marker,numberFormat:numberFormat+(value(spec,"lvlText").endsWith(")") ? "-paren" : ""),start};
     }
     async function fillBlocks(parent,nodes,breakPage=null) {
       let stack = [], currentId;
@@ -681,7 +697,12 @@ const Docx = (() => {
               if (spec.type === "ol") {
                 if (spec.start!==1) list.start = spec.start;
                 if (spec.formatType) list.type = spec.formatType;
-                if (spec.multi) list.dataset.multilevel = "";
+                if (spec.multi) {
+                  list.dataset.multilevel = "";
+                  list.dataset.multilevelStyle = spec.multiStyle;
+                } else list.dataset.numberFormat = spec.numberFormat;
+              } else {
+                list.dataset.marker = spec.marker;
               }
               const host = depth ? stack[depth-1].lastElementChild : parent;
               host.append(list);

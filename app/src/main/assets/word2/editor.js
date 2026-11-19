@@ -12,6 +12,8 @@ const icons = {
   bullets:"M8 5h13M8 12h13M8 19h13M3 5h1m-1 7h1m-1 7h1",
   numbers:"M9 5h12M9 12h12M9 19h12M3 3h1v4m-2 4h3v1l-3 2h3m-3 3h3v4H2m1-2h2",
   levels:"M7 5h14M10 12h11M13 19h8M3 4v3m2 4h2v1l-2 2h2m1 4h2v3H8",
+  outdent:"M10 5h11M10 9h11M10 13h11M10 17h11M7 11l-4 3 4 3z",
+  indent:"M3 5h18M3 9h18M10 13h11M10 17h11M3 11l4 3-4 3z",
   left:"M3 5h18M3 9h11M3 13h18M3 17h11M3 21h18",
   center:"M3 5h18M7 9h10M3 13h18M7 17h10M3 21h18",
   right:"M3 5h18M10 9h11M3 13h18M10 17h11M3 21h18",
@@ -305,15 +307,96 @@ function listLevel(out) {
     caret(item);
   });
 }
-function multilevel() {
+function paragraphIndent(out) {
+  const selected = blocks();
+  const listItem = selected.find(block => block.closest("li"))?.closest("li");
+  if (listItem) {
+    listLevel(out);
+    return;
+  }
   change(() => {
-    if (!element(savedRange.startContainer)?.closest("ol")) document.execCommand("insertOrderedList");
-    let list = element(capture()?.startContainer)?.closest("ol");
-    if (!list) return;
-    while (list.parentElement.closest("ol")) list = list.parentElement.closest("ol");
-    [list,...list.querySelectorAll("ol")].forEach(level => level.dataset.multilevel = "");
+    selected.forEach(block => {
+      const current = parseFloat(getComputedStyle(block).marginLeft) || 0;
+      const next = Math.max(0,Math.round((current + (out ? -48 : 48))*100)/100);
+      block.style.marginLeft = next ? next + "px" : "";
+    });
   });
 }
+function listRoot() {
+  let list = element(savedRange?.startContainer)?.closest("ol,ul");
+  while (list?.parentElement?.closest("ol,ul")) list = list.parentElement.closest("ol,ul");
+  return editor.contains(list) ? list : null;
+}
+function retagList(list,tag) {
+  for (const nested of [...list.querySelectorAll("ol,ul")].reverse()) retagListNode(nested,tag);
+  return retagListNode(list,tag);
+}
+function retagListNode(list,tag) {
+  if (list.tagName === tag.toUpperCase()) return list;
+  const replacement = document.createElement(tag);
+  replacement.replaceChildren(...list.childNodes);
+  list.replaceWith(replacement);
+  return replacement;
+}
+function unwrapList(list) {
+  const plain = document.createDocumentFragment();
+  const append = group => {
+    for (const item of [...group.children]) {
+      if (item.tagName !== "LI") continue;
+      let paragraph = document.createElement("p");
+      const flush = () => {
+        if (!paragraph.hasChildNodes()) paragraph.append(document.createElement("br"));
+        plain.append(paragraph);
+        paragraph = document.createElement("p");
+      };
+      for (const child of [...item.childNodes]) {
+        if (child.nodeType === 1 && child.matches("ol,ul")) {
+          if (paragraph.hasChildNodes()) flush();
+          append(child);
+        } else if (child.nodeType === 1 && child.matches("p,div,table")) {
+          if (paragraph.hasChildNodes()) flush();
+          plain.append(child);
+        } else paragraph.append(child);
+      }
+      if (paragraph.hasChildNodes()) flush();
+    }
+  };
+  append(list);
+  list.replaceWith(plain);
+}
+function applyListPreset(kind,style) {
+  change(() => {
+    let list = listRoot();
+    if (style === "none") {
+      if (list) unwrapList(list);
+      return;
+    }
+    const tag = kind === "bullets" ? "ul" : "ol";
+    if (!list) {
+      document.execCommand(tag === "ul" ? "insertUnorderedList" : "insertOrderedList");
+      capture();
+      list = listRoot();
+    }
+    if (!list) return;
+    list = retagList(list,tag);
+    for (const level of [list,...list.querySelectorAll("ol,ul")]) {
+      delete level.dataset.marker;
+      delete level.dataset.numberFormat;
+      delete level.dataset.multilevel;
+      delete level.dataset.multilevelStyle;
+      level.removeAttribute("type");
+      if (kind === "bullets") level.dataset.marker = style;
+      else if (kind === "numbers") {
+        level.dataset.numberFormat = style;
+        level.type = ({"lower-alpha":"a","upper-alpha":"A","lower-roman":"i","upper-roman":"I","lower-alpha-paren":"a"})[style] || "1";
+      } else {
+        level.dataset.multilevel = "";
+        level.dataset.multilevelStyle = style;
+      }
+    }
+  });
+}
+function multilevel() { applyListPreset("multilevel","hierarchical"); }
 function splitPage() {
   change(() => {
     const page = pageAt();
@@ -330,6 +413,54 @@ function splitPage() {
   });
 }
 let lastParagraphInsertAt = 0;
+let lastListInsertAt = 0;
+function listItemAtSelection() {
+  const range = selection().rangeCount && selection().getRangeAt(0);
+  if (!range) return null;
+  const item = element(range.startContainer)?.closest("li");
+  return item && editor.contains(item) && item.contains(range.endContainer) ? item : null;
+}
+function insertListItemAtCaret() {
+  const now = Date.now();
+  if (now - lastListInsertAt < 80) return;
+  lastListInsertAt = now;
+  capture();
+  change(() => {
+    const item = listItemAtSelection();
+    if (!item) return;
+    const list = item.parentElement;
+    const range = selection().getRangeAt(0);
+    range.deleteContents();
+    const nested = [...item.children].find(child => child.matches("ol,ul"));
+    const content = [...item.childNodes].filter(node => node !== nested);
+    const hasContent = content.some(node => node.textContent?.trim() || node.nodeType === 1 && node.matches("img,.shape"));
+    if (!hasContent) {
+      if (list.parentElement.closest("li")) {
+        const parent = list.parentElement.closest("li");
+        parent.after(item);
+        if (!list.children.length) list.remove();
+        caret(item);
+      } else {
+        const paragraph = document.createElement("p");
+        paragraph.append(document.createElement("br"));
+        list.after(paragraph);
+        item.remove();
+        if (!list.children.length) list.remove();
+        caret(paragraph);
+      }
+      return;
+    }
+    const tail = document.createRange();
+    tail.setStart(range.startContainer,range.startOffset);
+    if (nested) tail.setEndBefore(nested);
+    else tail.setEnd(item,item.childNodes.length);
+    const next = document.createElement("li");
+    next.append(tail.extractContents());
+    if (!next.hasChildNodes()) next.append(document.createElement("br"));
+    item.after(next);
+    caret(next);
+  });
+}
 function insertParagraphAtCaret() {
   const now = Date.now();
   if (now - lastParagraphInsertAt < 80) return;
@@ -1121,6 +1252,15 @@ function showMenu(button,keyboard = false) {
   activeMenu = popup;
   popup.hidden = false;
   button.setAttribute("aria-expanded","true");
+  if (popup.classList.contains("list-menu")) {
+    const current = listRoot();
+    const kind = popup.id.split("-")[0];
+    const selectedStyle = !current ? "none" : kind === "bullets" ? (current.tagName === "UL" ? current.dataset.marker || "disc" : "none") : kind === "numbers" ? (current.tagName === "OL" && !current.hasAttribute("data-multilevel") ? current.dataset.numberFormat || "decimal" : "none") : current.hasAttribute("data-multilevel") ? current.dataset.multilevelStyle || "hierarchical" : "none";
+    popup.querySelectorAll("[data-list-style]").forEach(option => {
+      const selected = option.dataset.listStyle === selectedStyle;
+      option.setAttribute("aria-pressed",selected);
+    });
+  }
   const rect = (button.closest(".size-control") || button).getBoundingClientRect();
   const viewportHeight = document.body.getBoundingClientRect().height || innerHeight;
   if (popup === sizeMenu) popup.style.maxHeight = Math.max(80,Math.min(420,viewportHeight-16)) + "px";
@@ -1147,6 +1287,50 @@ $$("[data-menu]").forEach(button => {
   button.setAttribute("aria-expanded","false");
   button.setAttribute("aria-controls",button.dataset.menu);
 });
+const listMenuOptions = {
+  bullets: [
+    ["none","Немає","Немає"],["disc","Крапка","●"],["circle","Порожнє коло","○"],["square","Квадрат","■"],
+    ["plus","Кольоровий хрестик","✣"],["diamond","Ромби","❖"],["arrow","Стрілка","➤"],["check","Галочка","✓"]
+  ],
+  numbers: [
+    ["none","Немає","Немає"],["decimal","1. 2. 3.","1. ─\n2. ─\n3. ─"],
+    ["decimal-paren","1) 2) 3)","1) ─\n2) ─\n3) ─"],
+    ["upper-roman","I. II. III.","I. ─\nII. ─\nIII. ─"],
+    ["upper-alpha","A. B. C.","A. ─\nB. ─\nC. ─"],
+    ["lower-alpha-paren","a) b) c)","a) ─\nb) ─\nc) ─"],
+    ["lower-alpha","a. b. c.","a. ─\nb. ─\nc. ─"],
+    ["lower-roman","i. ii. iii.","i. ─\nii. ─\niii. ─"]
+  ],
+  multilevel: [
+    ["none","Немає","Немає"],
+    ["outline","1. a. i.","1. ─\n  a. ─\n    i. ─"],
+    ["hierarchical","1. 1.1. 1.1.1.","1. ─\n  1.1. ─\n    1.1.1. ─"],
+    ["paren","1) a) i)","1) ─\n  a) ─\n    i) ─"],
+    ["symbols","Різні маркери","❖ ─\n  ➤ ─\n    ▪ ─"]
+  ]
+};
+for (const [kind,options] of Object.entries(listMenuOptions)) {
+  const popup = $("#"+kind+"-menu");
+  const heading = document.createElement("div");
+  heading.className = "list-menu-heading";
+  heading.textContent = kind === "bullets" ? "Бібліотека маркерів" : kind === "numbers" ? "Бібліотека нумерованих списків" : "Бібліотека багаторівневих списків";
+  const grid = document.createElement("div");
+  grid.className = "list-options";
+  for (const [style,label,preview] of options) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.listKind = kind;
+    button.dataset.listStyle = style;
+    button.title = label;
+    button.setAttribute("aria-label",label);
+    const sample = document.createElement("span");
+    sample.className = kind === "bullets" && style !== "none" ? "bullet-preview" : kind === "multilevel" ? "level-preview" : "number-preview";
+    sample.textContent = preview;
+    button.append(sample);
+    grid.append(button);
+  }
+  popup.append(heading,grid);
+}
 const sizeInput = $("#size");
 const sizeMenu = $("#size-menu");
 const sizeToggle = $("[data-menu=size-menu]");
@@ -1378,8 +1562,8 @@ async function action(type) {
       case "redo": step(1); break;
       case "cut": case "copy": case "paste": await clipboard(type); break;
       case "multilevel": multilevel(); break;
-      case "indentList": listLevel(false); break;
-      case "outdentList": listLevel(true); break;
+      case "indentParagraph": paragraphIndent(false); break;
+      case "outdentParagraph": paragraphIndent(true); break;
       case "pageBreak": splitPage(); break;
       case "imageLocal": $("#image-input").click(); break;
       case "openDoc": window.AndroidWord2 ? window.AndroidWord2.open() : $("#file-input").click(); break;
@@ -1499,7 +1683,8 @@ document.addEventListener("click",event => {
   }
   const menuId = activeMenu?.id;
   closeMenu();
-  if (data.command) exec(data.command);
+  if (data.listKind) applyListPreset(data.listKind,data.listStyle);
+  else if (data.command) exec(data.command);
   else if (data.action) void action(data.action);
   else if (data.size) fontSize(data.size);
   else if (data.spacing) change(() => blocks().forEach(block => block.style.lineHeight = data.spacing));
@@ -1560,6 +1745,11 @@ editor.addEventListener("pointerdown",event => {
   beginObjectDrag(event,"move");
 });
 editor.addEventListener("beforeinput",event => {
+  if (event.inputType === "insertParagraph" && listItemAtSelection()) {
+    event.preventDefault();
+    insertListItemAtCaret();
+    return;
+  }
   if (event.inputType === "insertParagraph" && element(selection().anchorNode)?.closest(".page > p")) {
     event.preventDefault();
     insertParagraphAtCaret();
@@ -1613,6 +1803,11 @@ document.addEventListener("keydown",event => {
   }
   if ($("#dialog").open || shareDialog.open || event.target.matches?.("input,select")) return;
   const editing = event.target === editor || editor.contains(event.target);
+  if (editing && event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey && listItemAtSelection()) {
+    event.preventDefault();
+    insertListItemAtCaret();
+    return;
+  }
   if (editing && event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey &&
       element(selection().anchorNode)?.closest(".page > p")) {
     event.preventDefault();

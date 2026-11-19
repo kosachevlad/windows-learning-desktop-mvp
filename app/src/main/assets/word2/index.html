@@ -67,9 +67,11 @@
     <section class="group paragraph" aria-label="Абзац">
       <div class="tools rows">
         <div class="row">
-          <button data-command="insertUnorderedList" title="Маркери" aria-label="Маркери"><i data-icon="bullets"></i></button>
-          <button data-command="insertOrderedList" title="Нумерація" aria-label="Нумерація"><i data-icon="numbers"></i></button>
-          <button data-menu="levels-menu" title="Багаторівневий список" aria-label="Багаторівневий список"><i data-icon="levels"></i><span class="chevron"></span></button>
+          <span class="list-control"><button data-command="insertUnorderedList" title="Маркери" aria-label="Маркери"><i data-icon="bullets"></i></button><button class="list-arrow" data-menu="bullets-menu" title="Вибрати маркер" aria-label="Вибрати маркер"><span class="chevron"></span></button></span>
+          <span class="list-control"><button data-command="insertOrderedList" title="Нумерація" aria-label="Нумерація"><i data-icon="numbers"></i></button><button class="list-arrow" data-menu="numbers-menu" title="Вибрати формат нумерації" aria-label="Вибрати формат нумерації"><span class="chevron"></span></button></span>
+          <span class="list-control"><button data-action="multilevel" title="Багаторівневий список" aria-label="Багаторівневий список"><i data-icon="levels"></i></button><button class="list-arrow" data-menu="multilevel-menu" title="Вибрати багаторівневий список" aria-label="Вибрати багаторівневий список"><span class="chevron"></span></button></span>
+          <button data-action="outdentParagraph" title="Зменшити відступ" aria-label="Зменшити відступ"><i data-icon="outdent"></i></button>
+          <button data-action="indentParagraph" title="Збільшити відступ" aria-label="Збільшити відступ"><i data-icon="indent"></i></button>
         </div>
         <div class="row">
           <button data-command="justifyLeft" title="Ліворуч" aria-label="Вирівняти ліворуч"><i data-icon="left"></i></button>
@@ -164,12 +166,10 @@
   <button type="button" data-table-border="insideH">Внутрішня горизонтальна межа</button>
   <button type="button" data-table-border="insideV">Внутрішня вертикальна межа</button>
 </div>
-<div class="popup simple-menu" id="levels-menu" hidden>
-  <button data-action="multilevel"><i data-icon="levels"></i> Почати багаторівневий список</button>
-  <button data-action="indentList">Збільшити рівень <small>Tab</small></button>
-  <button data-action="outdentList">Зменшити рівень <small>Shift+Tab</small></button>
-</div>
 <div class="popup simple-menu" id="spacing-menu" hidden></div>
+<div class="popup list-menu" id="bullets-menu" aria-label="Бібліотека маркерів" hidden></div>
+<div class="popup list-menu" id="numbers-menu" aria-label="Бібліотека нумерованих списків" hidden></div>
+<div class="popup list-menu" id="multilevel-menu" aria-label="Бібліотека багаторівневих списків" hidden></div>
 <div class="popup size-menu" id="size-menu" role="listbox" aria-label="Розміри шрифту в пунктах" hidden></div>
 <div class="popup" id="table-menu" hidden><div class="popup-title" id="table-label">Вставити таблицю</div><div id="table-grid" class="table-grid"></div></div>
 <div class="popup" id="shapes-menu" hidden><div class="popup-title">Фігури</div><div class="shape-grid" id="shape-grid"></div><div class="shape-fill"><span>Заливка</span><div id="shape-colors" class="swatches"></div></div></div>
