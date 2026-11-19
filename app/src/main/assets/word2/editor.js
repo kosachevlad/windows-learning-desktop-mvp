@@ -52,10 +52,11 @@ let name = "Документ 1";
 let savedHtml;
 let history = [], index = -1, previousType = "", lastChange = 0;
 const draftStorageKey = "word-editor-draft-v1";
+const openingNativeFile = new URLSearchParams(location.search).has("nativeFile");
 let draftSaveTimer, draftStorageWarning = false;
 function saveDraft() {
   clearTimeout(draftSaveTimer);
-  if (!editor.isContentEditable || new URLSearchParams(location.hash.slice(1)).has("doc")) return true;
+  if (!editor.isContentEditable || openingNativeFile || new URLSearchParams(location.hash.slice(1)).has("doc")) return true;
   try {
     const copy = editor.cloneNode(true);
     copy.querySelectorAll(".table-selected").forEach(cell => cell.classList.remove("table-selected"));
@@ -1647,13 +1648,14 @@ $("#file-input").addEventListener("change",async event => {
     flash("Відкрито " + file.name);
   } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
 });
-window.word2OpenFromApp = async (filename,base64) => {
-  if (!await confirmReplace()) return;
+window.word2OpenFromApp = async (filename,base64,folderId,initialOpen = false) => {
+  if (!initialOpen && !await confirmReplace()) return;
   try {
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary,character => character.charCodeAt(0));
     const file = new File([bytes],filename,{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
     loadDocument(await Docx.read(file),filename.replace(/\.docx$/i,""));
+    if (folderId != null) window.AndroidWord2?.documentOpened(folderId);
     flash("Відкрито " + filename);
   } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
 };
@@ -1901,4 +1903,4 @@ document.addEventListener("touchend",event => {
 },{passive:false});
 document.addEventListener("touchcancel",clearPullRefresh);
 window.addEventListener("pagehide",saveDraft);
-if (new URLSearchParams(location.hash.slice(1)).has("doc") || !restoreDraft()) loadDocument([...editor.children],name);
+if (openingNativeFile || new URLSearchParams(location.hash.slice(1)).has("doc") || !restoreDraft()) loadDocument([...editor.children],name);

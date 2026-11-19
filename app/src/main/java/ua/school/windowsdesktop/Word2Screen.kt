@@ -44,11 +44,13 @@ private class Word2Bridge(
     private val onError: (String) -> Unit,
     private val onOpen: () -> Unit,
     private val onSaveAs: (String, String) -> Unit,
+    private val onDocumentOpened: (String) -> Unit,
     private val onClose: () -> Unit,
 ) {
     private val main = Handler(Looper.getMainLooper())
     @JavascriptInterface fun open() { main.post(onOpen) }
     @JavascriptInterface fun saveAs(name: String, base64: String) { main.post { onSaveAs(name, base64) } }
+    @JavascriptInterface fun documentOpened(folderId: String) { main.post { onDocumentOpened(folderId) } }
     @JavascriptInterface fun close() { main.post(onClose) }
     @JavascriptInterface
     fun save(name: String, base64: String) {
@@ -104,13 +106,16 @@ internal fun Word2Screen(
     var pendingSave by remember { mutableStateOf<Pair<String, String>?>(null) }
     var closeRequested by remember { mutableStateOf(false) }
     var closeAfterSave by remember { mutableStateOf(false) }
-    var folderId by remember { mutableStateOf(documentsId) }
+    val initialFolderId = nodes.firstOrNull { it.id == initialFileId }?.parentId ?: documentsId
+    var currentFolderId by remember(initialFileId) { mutableStateOf(initialFolderId) }
+    var folderId by remember(initialFileId) { mutableStateOf(initialFolderId) }
     var fileName by remember { mutableStateOf("Документ") }
     var webView by remember { mutableStateOf<WebView?>(null) }
-    val bridge = remember(repository, documentsId) {
+    val bridge = remember(repository, documentsId, initialFileId) {
         Word2Bridge(repository, documentsId, scope, onError,
-            onOpen = { folderId = documentsId; openRequested = true },
-            onSaveAs = { name, data -> folderId = documentsId; fileName = name.removeSuffix(".docx"); pendingSave = name to data },
+            onOpen = { folderId = currentFolderId; openRequested = true },
+            onSaveAs = { name, data -> folderId = currentFolderId; fileName = name.removeSuffix(".docx"); pendingSave = name to data },
+            onDocumentOpened = { openedFolderId -> currentFolderId = openedFolderId },
             onClose = { closeRequested = true })
     }
     var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
@@ -137,7 +142,7 @@ internal fun Word2Screen(
                         if (document != null) scope.launch {
                             runCatching {
                                 val data = Base64.encodeToString(repository.readTextBytes(document.id), Base64.NO_WRAP)
-                                view?.evaluateJavascript("window.word2OpenFromApp(${org.json.JSONObject.quote(document.name)},${org.json.JSONObject.quote(data)})", null)
+                                view?.evaluateJavascript("window.word2OpenFromApp(${org.json.JSONObject.quote(document.name)},${org.json.JSONObject.quote(data)},${org.json.JSONObject.quote(document.parentId ?: FileOperations.ROOT_ID)},true)", null)
                             }.onFailure { onError(it.message ?: "Не вдалося відкрити документ") }
                         }
                     }
@@ -168,7 +173,7 @@ internal fun Word2Screen(
                     }
                 }
                 addJavascriptInterface(bridge, "AndroidWord2")
-                loadUrl("https://kosachevlad.github.io/word/")
+                loadUrl("https://kosachevlad.github.io/word/" + if (initialFileId != null) "?nativeFile=1" else "")
             }
         },
         onRelease = { view -> view.removeJavascriptInterface("AndroidWord2"); view.destroy() },
@@ -212,7 +217,7 @@ internal fun Word2Screen(
                                 scope.launch {
                                     runCatching {
                                         val data = Base64.encodeToString(repository.readTextBytes(child.id), Base64.NO_WRAP)
-                                        webView?.evaluateJavascript("window.word2OpenFromApp(${org.json.JSONObject.quote(child.name)},${org.json.JSONObject.quote(data)})", null)
+                                        webView?.evaluateJavascript("window.word2OpenFromApp(${org.json.JSONObject.quote(child.name)},${org.json.JSONObject.quote(data)},${org.json.JSONObject.quote(child.parentId ?: FileOperations.ROOT_ID)})", null)
                                         openRequested = false
                                     }.onFailure { onError(it.message ?: "Не вдалося відкрити документ") }
                                 }
@@ -234,6 +239,7 @@ internal fun Word2Screen(
                         val existing = repository.children(folderId)
                         val unique = nextWord2Name(target, existing)
                         repository.createTextBytes(unique, folderId, Base64.decode(data, Base64.DEFAULT))
+                        currentFolderId = folderId
                         webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(unique)})", null)
                         pendingSave = null
                         if (closeAfterSave) { closeAfterSave = false; onClose() }
