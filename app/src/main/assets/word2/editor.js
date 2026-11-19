@@ -433,7 +433,7 @@ function insertListItemAtCaret() {
     range.deleteContents();
     const nested = [...item.children].find(child => child.matches("ol,ul"));
     const content = [...item.childNodes].filter(node => node !== nested);
-    const hasContent = content.some(node => node.textContent?.trim() || node.nodeType === 1 && node.matches("img,.shape"));
+    const hasContent = content.some(node => node.textContent?.replace(/\u200b/g,"").trim() || node.nodeType === 1 && node.matches("img,.shape"));
     if (!hasContent) {
       if (list.parentElement.closest("li")) {
         const parent = list.parentElement.closest("li");
@@ -456,9 +456,21 @@ function insertListItemAtCaret() {
     else tail.setEnd(item,item.childNodes.length);
     const next = document.createElement("li");
     next.append(tail.extractContents());
-    if (!next.hasChildNodes()) next.append(document.createElement("br"));
+    // Android WebView can put a caret at an empty <li> back in the previous item.
+    // An actual text node gives the new item a stable editable caret position.
+    if (!next.textContent.replace(/\u200b/g,"").trim() && !next.querySelector("img,.shape")) {
+      const placeholder = document.createTextNode("\u200b");
+      const container = next.firstElementChild?.matches("p,div") ? next.firstElementChild : next;
+      container.replaceChildren(placeholder);
+    }
     item.after(next);
-    caret(next);
+    const start = next.firstElementChild?.matches("p,div") ? next.firstElementChild.firstChild : next.firstChild;
+    caret(start || next, start?.nodeType === Node.TEXT_NODE && start.data === "\u200b");
+    requestAnimationFrame(() => {
+      if (next.isConnected && document.activeElement === editor && !next.contains(selection().anchorNode)) {
+        caret(start || next, start?.nodeType === Node.TEXT_NODE && start.data === "\u200b");
+      }
+    });
   });
 }
 function insertParagraphAtCaret() {
