@@ -15,6 +15,7 @@ import android.text.style.UnderlineSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
 import android.text.style.StyleSpan
+import android.graphics.text.LineBreaker
 import android.text.Layout
 import android.text.style.AlignmentSpan
 import android.text.style.CharacterStyle
@@ -88,7 +89,7 @@ fun RichTextEditor(
             // Do not reset typeface or textSize here: those are selection spans.
             // Updating them on every recomposition would restyle the whole document.
             editor.gravity = textGravity
-            editor.justificationMode = if (justify) Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE
+            editor.justificationMode = if (justify) LineBreaker.JUSTIFICATION_MODE_INTER_WORD else LineBreaker.JUSTIFICATION_MODE_NONE
             onEditorReady(editor)
             editor.onSelectionChangedCallback = { onSelectionStyleChanged(selectionStyle(editor)) }
         },

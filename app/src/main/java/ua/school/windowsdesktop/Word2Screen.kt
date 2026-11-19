@@ -87,7 +87,8 @@ private fun WebView.updateWord2ViewportHeight() {
     )
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+// Word2Bridge exposes only methods annotated with @JavascriptInterface; lint loses its type in AndroidView.apply.
+@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 internal fun Word2Screen(
     repository: LearningFileRepository,
