@@ -1612,15 +1612,18 @@ async function action(type) {
       case "openDoc": window.AndroidWord2 ? window.AndroidWord2.open() : $("#file-input").click(); break;
       case "closeEditor": if (window.AndroidWord2) window.AndroidWord2.close(); else window.history.back(); break;
       case "newDoc": {
-        if (await confirmReplace()) loadDocument([newPage()],"Документ 1");
+        if (await confirmReplace()) {
+          loadDocument([newPage()],"Документ 1");
+          window.AndroidWord2?.newDocument();
+        }
         break;
       }
       case "saveAndShare": openShareDialog(); break;
-      case "saveDoc": {
+      case "saveDoc": case "saveAs": {
         if (window.AndroidWord2) {
           const blob = Docx.write(editor);
           const reader = new FileReader();
-          reader.onload = () => window.AndroidWord2.saveAs(docxFilename(name),String(reader.result).split(",")[1]);
+          reader.onload = () => window.AndroidWord2[type === "saveAs" ? "saveAs" : "save"](docxFilename(name),String(reader.result).split(",")[1]);
           reader.readAsDataURL(blob);
           break;
         }
@@ -1630,17 +1633,11 @@ async function action(type) {
         const snapshot = html();
         const blob = Docx.write(editor);
         const file = new File([blob],filename,{type:blob.type});
-        if (window.AndroidWord2) {
-          const reader = new FileReader();
-          reader.onload = () => window.AndroidWord2.save(file.name, String(reader.result).split(",")[1]);
-          reader.readAsDataURL(file);
-        } else {
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(file);
-          link.download = file.name;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(link.href),30000);
-        }
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(file);
+        link.download = file.name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href),30000);
         name = filename.slice(0,-5);
         savedHtml = snapshot;
         update();
@@ -1678,14 +1675,14 @@ $("#file-input").addEventListener("change",async event => {
     flash("Відкрито " + file.name);
   } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
 });
-window.word2OpenFromApp = async (filename,base64,folderId,initialOpen = false) => {
+window.word2OpenFromApp = async (filename,base64,folderId,initialOpen = false,fileId = null) => {
   if (!initialOpen && !await confirmReplace()) return;
   try {
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary,character => character.charCodeAt(0));
     const file = new File([bytes],filename,{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
     loadDocument(await Docx.read(file),filename.replace(/\.docx$/i,""));
-    if (folderId != null) window.AndroidWord2?.documentOpened(folderId);
+    if (fileId != null) window.AndroidWord2?.documentOpened(fileId,folderId);
     flash("Відкрито " + filename);
   } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
 };
