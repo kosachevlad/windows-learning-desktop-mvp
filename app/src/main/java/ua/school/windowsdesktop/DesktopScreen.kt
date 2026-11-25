@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -27,27 +30,40 @@ import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.*
 
 private data class DesktopPosition(val x: Float, val y: Float)
+private data class DesktopSortItem(val id: String, val name: String, val type: String, val size: Long, val modified: Long, val system: Boolean)
 internal enum class NewItemKind { FOLDER, TEXT, PAINT, WORD }
+internal enum class DesktopSort { NAME, SIZE, TYPE, MODIFIED }
 
-@Composable internal fun EmptySpaceContextMenu(onDismiss: () -> Unit, onCreate: (NewItemKind) -> Unit) {
-    var createExpanded by remember { mutableStateOf(false) }
+@Composable internal fun EmptySpaceContextMenu(
+    onDismiss: () -> Unit,
+    onSort: ((DesktopSort) -> Unit)? = null,
+    onCreate: (NewItemKind) -> Unit,
+) {
+    var submenu by remember { mutableStateOf<String?>(null) }
     val wideMenu = LocalConfiguration.current.screenWidthDp >= 500
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         Row(verticalAlignment = Alignment.Top) {
-            if (wideMenu || !createExpanded) {
+            if (wideMenu || submenu == null) {
                 Column(Modifier.width(220.dp)) {
                     DropdownMenuItem(text = { Text("Вигляд") }, onClick = {})
+                    if (onSort != null) DropdownMenuItem(text = { Text("Сортувати за  ▸") }, onClick = { submenu = if (submenu == "sort") null else "sort" })
                     DropdownMenuItem(text = { Text("Оновити") }, onClick = {})
-                    DropdownMenuItem(text = { Text("Створити  ▸") }, onClick = { createExpanded = !createExpanded })
+                    DropdownMenuItem(text = { Text("Створити  ▸") }, onClick = { submenu = if (submenu == "create") null else "create" })
                     DropdownMenuItem(text = { Text("Параметри") }, onClick = {})
                 }
             }
-            if (createExpanded) {
-                if (wideMenu) VerticalDivider(Modifier.height(288.dp))
-                Column(Modifier.width(220.dp).padding(top = if (wideMenu) 96.dp else 0.dp)) {
-                    if (!wideMenu) DropdownMenuItem(text = { Text("‹  Створити") }, onClick = { createExpanded = false })
-                    listOf(NewItemKind.FOLDER to "Папку", NewItemKind.TEXT to "Текстовий документ", NewItemKind.PAINT to "Точковий рисунок", NewItemKind.WORD to "Документ Word").forEach { (kind, label) ->
-                        DropdownMenuItem(text = { Text(label) }, onClick = { createExpanded = false; onCreate(kind) })
+            if (submenu != null) {
+                if (wideMenu) VerticalDivider(Modifier.height(if (onSort != null) 336.dp else 288.dp))
+                Column(Modifier.width(220.dp).padding(top = if (!wideMenu) 0.dp else if (submenu == "sort") 48.dp else if (onSort != null) 144.dp else 96.dp)) {
+                    if (!wideMenu) DropdownMenuItem(text = { Text(if (submenu == "sort") "‹  Сортувати за" else "‹  Створити") }, onClick = { submenu = null })
+                    if (submenu == "sort") {
+                        listOf(DesktopSort.NAME to "Ім’я", DesktopSort.SIZE to "Розмір", DesktopSort.TYPE to "Тип елемента", DesktopSort.MODIFIED to "Дата змінення").forEach { (sort, label) ->
+                            DropdownMenuItem(text = { Text(label) }, onClick = { submenu = null; onSort?.invoke(sort) })
+                        }
+                    } else {
+                        listOf(NewItemKind.FOLDER to "Папку", NewItemKind.TEXT to "Текстовий документ", NewItemKind.PAINT to "Точковий рисунок", NewItemKind.WORD to "Документ Word").forEach { (kind, label) ->
+                            DropdownMenuItem(text = { Text(label) }, onClick = { submenu = null; onCreate(kind) })
+                        }
                     }
                 }
             }
@@ -87,6 +103,7 @@ internal fun DesktopScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var positions by remember { mutableStateOf(loadDesktopPositions(context)) }
+    var systemPositions by remember { mutableStateOf(loadSystemDesktopPositions(context)) }
     var backgroundMenu by remember { mutableStateOf<Offset?>(null) }
     var createKind by remember { mutableStateOf<NewItemKind?>(null) }
     var createPosition by remember { mutableStateOf(Offset.Zero) }
@@ -128,8 +145,15 @@ internal fun DesktopScreen(
         onShowLoading()
         selectedId = null; selectedSystemShortcutId = null; backgroundMenu = point
     }) {
+        val density = LocalDensity.current
         val systemShortcutType = stringResource(R.string.system_shortcut)
         val rows = ((maxHeight.value - 12f) / 100f).toInt().coerceAtLeast(1)
+        val maxIconX = with(density) { (maxWidth - 96.dp).toPx() }.coerceAtLeast(0f)
+        val maxIconY = with(density) { (maxHeight - 108.dp).toPx() }.coerceAtLeast(0f)
+        fun move(position: DesktopPosition, delta: Offset) = DesktopPosition(
+            (position.x + delta.x).coerceIn(0f, maxIconX),
+            (position.y + delta.y).coerceIn(0f, maxIconY),
+        )
         val systemIcons = listOf(
             SystemShortcut("this_pc", R.drawable.this_computer, stringResource(R.string.this_pc), onComputer, isProtected = true),
             SystemShortcut("my_files", R.drawable.my_files, stringResource(R.string.my_files), onFiles),
@@ -137,13 +161,49 @@ internal fun DesktopScreen(
             SystemShortcut("paint", R.drawable.paint, "Paint", onPaint),
             SystemShortcut("recycle_bin", if (trashNotEmpty) R.drawable.full_bin else R.drawable.empty_bin, stringResource(R.string.recycle_bin), onTrash, isProtected = true, isTrash = true),
         )
-        systemIcons.filterNot { it.id in hiddenSystemShortcuts }.forEachIndexed { index, shortcut ->
+        val visibleSystemIcons = systemIcons.filterNot { it.id in hiddenSystemShortcuts }
+        val sortItems = visibleSystemIcons.map { shortcut ->
+            DesktopSortItem(shortcut.id, systemShortcutNames[shortcut.id] ?: shortcut.defaultName, systemShortcutType, 0L, 0L, true)
+        } + desktopNodes.map { node ->
+            DesktopSortItem(node.id, node.name, desktopSortType(node), node.sizeBytes, node.modifiedAt, false)
+        }
+        fun sortDesktop(sort: DesktopSort) {
+            val byName = compareBy<DesktopSortItem> { it.name.lowercase() }
+            val ordered = when (sort) {
+                DesktopSort.NAME -> sortItems.sortedWith(byName)
+                DesktopSort.SIZE -> sortItems.sortedWith(compareBy<DesktopSortItem> { it.size }.then(byName))
+                DesktopSort.TYPE -> sortItems.sortedWith(compareBy<DesktopSortItem> { it.type.lowercase() }.then(byName))
+                DesktopSort.MODIFIED -> sortItems.sortedWith(compareByDescending<DesktopSortItem> { it.modified }.then(byName))
+            }
+            val newSystemPositions = systemPositions.toMutableMap()
+            val newPositions = positions.toMutableMap()
+            ordered.forEachIndexed { index, item ->
+                val position = DesktopPosition(
+                    with(density) { (12 + (index / rows) * 104).dp.toPx() }.coerceAtMost(maxIconX),
+                    with(density) { (12 + (index % rows) * 100).dp.toPx() }.coerceAtMost(maxIconY),
+                )
+                if (item.system) newSystemPositions[item.id] = position else newPositions[item.id] = position
+            }
+            systemPositions = newSystemPositions; saveSystemDesktopPositions(context, newSystemPositions)
+            positions = newPositions; saveDesktopPositions(context, newPositions)
+            backgroundMenu = null
+        }
+        visibleSystemIcons.forEachIndexed { index, shortcut ->
             val label = systemShortcutNames[shortcut.id] ?: shortcut.defaultName
-            SystemDesktopIcon(shortcut.icon, label, 12 + (index / rows) * 104, 12 + (index % rows) * 100,
+            val defaultPosition = DesktopPosition(
+                with(density) { (12 + (index / rows) * 104).dp.toPx() },
+                with(density) { (12 + (index % rows) * 100).dp.toPx() },
+            )
+            SystemDesktopIcon(shortcut.icon, label, systemPositions[shortcut.id] ?: defaultPosition,
                 onOpen = shortcut.open,
                 onShowLoading = onShowLoading,
                 selected = shortcut.id == selectedSystemShortcutId,
                 onSelect = { selectedId = null; selectedSystemShortcutId = shortcut.id },
+                onDrag = { delta ->
+                    val current = systemPositions[shortcut.id] ?: defaultPosition
+                    systemPositions = systemPositions + (shortcut.id to move(current, delta))
+                },
+                onDragEnd = { saveSystemDesktopPositions(context, systemPositions) },
                 onRename = if (shortcut.isProtected) null else {
                     { renameSystemShortcut = shortcut; newName = label }
                 },
@@ -165,6 +225,10 @@ internal fun DesktopScreen(
             val position = positions.getValue(node.id)
             UserDesktopIcon(node, position, node.id == selectedId, showFileExtensions,
                 onSelect = { selectedSystemShortcutId = null; selectedId = node.id }, onOpen = { open(node) },
+                onDrag = { delta ->
+                    positions = positions + (node.id to move(positions.getValue(node.id), delta))
+                },
+                onDragEnd = { saveDesktopPositions(context, positions) },
                 onRename = { renameTarget = node; newName = displayName(node, showFileExtensions) },
                 onDelete = { deleteTarget = node },
                 onProperties = { propertiesTarget = DesktopProperties(displayName(node, showFileExtensions), fileTypeName(node)) },
@@ -172,7 +236,7 @@ internal fun DesktopScreen(
         }
 
         backgroundMenu?.let { point -> Box(Modifier.offset { IntOffset(point.x.roundToInt(), point.y.roundToInt()) }.size(1.dp)) {
-            EmptySpaceContextMenu(onDismiss = { backgroundMenu = null }) { kind ->
+            EmptySpaceContextMenu(onDismiss = { backgroundMenu = null }, onSort = ::sortDesktop) { kind ->
                 createPosition = point; createKind = kind; newName = ""; backgroundMenu = null
             }
         } }
@@ -227,11 +291,20 @@ internal fun DesktopScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun SystemDesktopIcon(
-    icon: Int, label: String, x: Int, y: Int, onOpen: () -> Unit, onRename: (() -> Unit)?, onDelete: (() -> Unit)?,
-    onProperties: () -> Unit, onEmptyTrash: (() -> Unit)?, selected: Boolean, onSelect: () -> Unit, onShowLoading: () -> Unit,
+    icon: Int, label: String, position: DesktopPosition, onOpen: () -> Unit, onRename: (() -> Unit)?, onDelete: (() -> Unit)?,
+    onProperties: () -> Unit, onEmptyTrash: (() -> Unit)?, selected: Boolean, onSelect: () -> Unit,
+    onDrag: (Offset) -> Unit, onDragEnd: () -> Unit, onShowLoading: () -> Unit,
 ) {
     var menuPosition by remember { mutableStateOf<Offset?>(null) }
-    Box(Modifier.offset(x = x.dp, y = y.dp).width(92.dp)
+    Box(Modifier.offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }.width(92.dp)
+        .pointerInput(label) {
+            detectDragGestures(
+                onDragStart = { onSelect(); menuPosition = null },
+                onDragEnd = onDragEnd,
+                onDragCancel = onDragEnd,
+                onDrag = { change, amount -> change.consume(); onDrag(amount) },
+            )
+        }
         .onSecondaryClick(PointerEventPass.Initial) { point -> onShowLoading(); onSelect(); menuPosition = point }) {
         Column(Modifier.fillMaxWidth().background(if (selected) Color(0x6633A7FF) else Color.Transparent)
             .combinedClickable(onClick = onSelect, onDoubleClick = onOpen, onLongClick = { onShowLoading(); onSelect(); menuPosition = Offset(8f, 8f) })
@@ -255,11 +328,19 @@ internal fun DesktopScreen(
 @Composable private fun UserDesktopIcon(
     node: FileNode, position: DesktopPosition, selected: Boolean, showExtensions: Boolean,
     onSelect: () -> Unit, onOpen: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit,
-    onProperties: () -> Unit, onShowLoading: () -> Unit,
+    onProperties: () -> Unit, onDrag: (Offset) -> Unit, onDragEnd: () -> Unit, onShowLoading: () -> Unit,
 ) {
     var menuPosition by remember { mutableStateOf<Offset?>(null) }
     Box(Modifier.offset { IntOffset(position.x.roundToInt(), position.y.roundToInt()) }.width(96.dp)
         .background(if (selected) Color(0x6633A7FF) else Color.Transparent)
+        .pointerInput(node.id) {
+            detectDragGestures(
+                onDragStart = { onSelect(); menuPosition = null },
+                onDragEnd = onDragEnd,
+                onDragCancel = onDragEnd,
+                onDrag = { change, amount -> change.consume(); onDrag(amount) },
+            )
+        }
         .onSecondaryClick(PointerEventPass.Initial) { point -> onShowLoading(); onSelect(); menuPosition = point }) {
         Column(Modifier.fillMaxWidth().combinedClickable(onClick = onSelect, onDoubleClick = onOpen,
             onLongClick = { onShowLoading(); onSelect(); menuPosition = Offset(8f, 8f) }).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -283,6 +364,14 @@ private fun fileTypeName(node: FileNode): String = when (node.kind) {
     FileKind.PAINT -> "Зображення"
 }
 
+private fun desktopSortType(node: FileNode): String = when {
+    node.kind == FileKind.FOLDER -> "Папка"
+    node.name.endsWith(".docx", true) -> "Документ Word"
+    node.name.endsWith(".mp3", true) -> "Музичний файл"
+    node.kind == FileKind.TEXT -> "Текстовий документ"
+    else -> "Точковий рисунок"
+}
+
 private fun loadSystemShortcutNames(context: Context): Map<String, String> =
     context.getSharedPreferences("desktop_system_shortcuts", Context.MODE_PRIVATE).all
         .mapNotNull { (id, value) -> (value as? String)?.let { id to it } }.toMap()
@@ -300,15 +389,21 @@ private fun saveHiddenSystemShortcuts(context: Context, ids: Set<String>) {
     context.getSharedPreferences("desktop_system_shortcuts", Context.MODE_PRIVATE).edit().putStringSet("hidden", ids).apply()
 }
 
-private fun loadDesktopPositions(context: Context): Map<String, DesktopPosition> {
-    val preferences = context.getSharedPreferences("desktop_positions", Context.MODE_PRIVATE)
+private fun loadDesktopPositions(context: Context): Map<String, DesktopPosition> = loadPositions(context, "desktop_positions")
+private fun loadSystemDesktopPositions(context: Context): Map<String, DesktopPosition> = loadPositions(context, "desktop_system_positions")
+
+private fun loadPositions(context: Context, preferenceName: String): Map<String, DesktopPosition> {
+    val preferences = context.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
     return preferences.getStringSet("ids", emptySet()).orEmpty().associateWith { id ->
         DesktopPosition(preferences.getFloat("${id}_x", 120f), preferences.getFloat("${id}_y", 20f))
     }
 }
 
-private fun saveDesktopPositions(context: Context, positions: Map<String, DesktopPosition>) {
-    val editor = context.getSharedPreferences("desktop_positions", Context.MODE_PRIVATE).edit().putStringSet("ids", positions.keys)
+private fun saveDesktopPositions(context: Context, positions: Map<String, DesktopPosition>) = savePositions(context, "desktop_positions", positions)
+private fun saveSystemDesktopPositions(context: Context, positions: Map<String, DesktopPosition>) = savePositions(context, "desktop_system_positions", positions)
+
+private fun savePositions(context: Context, preferenceName: String, positions: Map<String, DesktopPosition>) {
+    val editor = context.getSharedPreferences(preferenceName, Context.MODE_PRIVATE).edit().putStringSet("ids", positions.keys)
     positions.forEach { (id, position) -> editor.putFloat("${id}_x", position.x).putFloat("${id}_y", position.y) }
     editor.apply()
 }
