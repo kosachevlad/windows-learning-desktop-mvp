@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.net.Uri
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import ua.school.windowsdesktop.data.LearningFileRepository
 import ua.school.windowsdesktop.domain.FileKind
 import ua.school.windowsdesktop.domain.FileNode
@@ -40,6 +42,7 @@ private class Word2Bridge(
     private val onOpen: () -> Unit,
     private val onSave: (String, String) -> Unit,
     private val onSaveAs: (String, String) -> Unit,
+    private val onAutoSave: (String, String, Int) -> Unit,
     private val onDocumentOpened: (String, String) -> Unit,
     private val onNewDocument: () -> Unit,
     private val onClose: () -> Unit,
@@ -48,6 +51,7 @@ private class Word2Bridge(
     @JavascriptInterface fun open() { main.post(onOpen) }
     @JavascriptInterface fun save(name: String, base64: String) { main.post { onSave(name, base64) } }
     @JavascriptInterface fun saveAs(name: String, base64: String) { main.post { onSaveAs(name, base64) } }
+    @JavascriptInterface fun autoSave(fileId: String, base64: String, request: Int) { main.post { onAutoSave(fileId, base64, request) } }
     @JavascriptInterface fun documentOpened(fileId: String, folderId: String) { main.post { onDocumentOpened(fileId, folderId) } }
     @JavascriptInterface fun newDocument() { main.post(onNewDocument) }
     @JavascriptInterface fun close() { main.post(onClose) }
@@ -84,6 +88,7 @@ internal fun Word2Screen(
     onError: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val writeMutex = remember { Mutex() }
     val documentsId = nodes.firstOrNull { it.parentId == FileOperations.ROOT_ID && it.kind == FileKind.FOLDER && it.name == "Документи" }?.id
         ?: FileOperations.ROOT_ID
     var openRequested by remember { mutableStateOf(false) }
@@ -107,13 +112,24 @@ internal fun Word2Screen(
                     pendingSave = name to data
                 } else scope.launch {
                     runCatching {
-                        val saved = repository.writeTextBytes(fileId, Base64.decode(data, Base64.DEFAULT))
-                        webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(saved.name)})", null)
+                        val saved = writeMutex.withLock { repository.writeTextBytes(fileId, Base64.decode(data, Base64.DEFAULT)) }
+                        webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(saved.name)},${org.json.JSONObject.quote(saved.id)})", null)
                         if (closeAfterSave) { closeAfterSave = false; onClose() }
                     }.onFailure { onError(it.message ?: "Не вдалося зберегти документ") }
                 }
             },
             onSaveAs = { name, data -> folderId = currentFolderId; fileName = name.removeSuffix(".docx"); pendingSave = name to data },
+            onAutoSave = { fileId, data, request ->
+                if (fileId == currentFileId) scope.launch {
+                    runCatching {
+                        writeMutex.withLock { repository.writeTextBytes(fileId, Base64.decode(data, Base64.DEFAULT)) }
+                    }.onSuccess {
+                        webView?.evaluateJavascript("window.word2AutoSaved($request)", null)
+                    }.onFailure {
+                        webView?.evaluateJavascript("window.word2AutoSaveFailed($request)", null)
+                    }
+                }
+            },
             onDocumentOpened = { openedFileId, openedFolderId -> currentFileId = openedFileId; currentFolderId = openedFolderId },
             onNewDocument = { currentFileId = null; currentFolderId = documentsId },
             onClose = { closeRequested = true })
@@ -236,16 +252,18 @@ internal fun Word2Screen(
                 scope.launch {
                     runCatching {
                         val target = "$safeName.docx"
-                        val existing = repository.children(folderId)
-                        val current = existing.firstOrNull { it.id == currentFileId && it.name.equals(target, ignoreCase = true) }
-                        val saved = if (current != null) {
-                            repository.writeTextBytes(current.id, Base64.decode(data, Base64.DEFAULT))
-                        } else {
-                            repository.createTextBytes(nextWord2Name(target, existing), folderId, Base64.decode(data, Base64.DEFAULT))
+                        val saved = writeMutex.withLock {
+                            val existing = repository.children(folderId)
+                            val current = existing.firstOrNull { it.id == currentFileId && it.name.equals(target, ignoreCase = true) }
+                            if (current != null) {
+                                repository.writeTextBytes(current.id, Base64.decode(data, Base64.DEFAULT))
+                            } else {
+                                repository.createTextBytes(nextWord2Name(target, existing), folderId, Base64.decode(data, Base64.DEFAULT))
+                            }
                         }
                         currentFileId = saved.id
                         currentFolderId = folderId
-                        webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(saved.name)})", null)
+                        webView?.evaluateJavascript("window.word2SavedInApp(${org.json.JSONObject.quote(saved.name)},${org.json.JSONObject.quote(saved.id)})", null)
                         pendingSave = null
                         if (closeAfterSave) { closeAfterSave = false; onClose() }
                     }.onFailure { onError(it.message ?: "Не вдалося зберегти документ") }

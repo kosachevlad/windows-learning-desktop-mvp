@@ -52,7 +52,8 @@ let name = "Документ 1";
 let savedHtml;
 let history = [], index = -1, previousType = "", lastChange = 0;
 const draftStorageKey = "word-editor-draft-v1";
-const openingNativeFile = new URLSearchParams(location.search).has("nativeFile");
+let openingNativeFile = new URLSearchParams(location.search).has("nativeFile");
+let nativeFileId = null, autoSaveInFlight = false, autoSaveSequence = 0, autoSaveSnapshot = "";
 let draftSaveTimer, draftStorageWarning = false;
 function saveDraft() {
   clearTimeout(draftSaveTimer);
@@ -73,6 +74,41 @@ function scheduleDraftSave() {
   clearTimeout(draftSaveTimer);
   draftSaveTimer = setTimeout(saveDraft,250);
 }
+function autoSave() {
+  if (!editor.isContentEditable || !window.AndroidWord2 || !nativeFileId) {
+    saveDraft();
+    return;
+  }
+  if (autoSaveInFlight || html() === savedHtml) return;
+  try {
+    const fileId = nativeFileId;
+    const snapshot = html();
+    const request = ++autoSaveSequence;
+    const reader = new FileReader();
+    autoSaveInFlight = true;
+    autoSaveSnapshot = snapshot;
+    reader.onload = () => {
+      if (request !== autoSaveSequence || fileId !== nativeFileId) return;
+      window.AndroidWord2.autoSave(fileId,String(reader.result).split(",")[1],request);
+    };
+    reader.onerror = () => window.word2AutoSaveFailed(request);
+    reader.readAsDataURL(Docx.write(editor));
+  } catch {
+    autoSaveInFlight = false;
+    flash("Не вдалося автоматично зберегти документ.");
+  }
+}
+window.word2AutoSaved = request => {
+  if (request !== autoSaveSequence) return;
+  savedHtml = autoSaveSnapshot;
+  autoSaveInFlight = false;
+};
+window.word2AutoSaveFailed = request => {
+  if (request !== autoSaveSequence) return;
+  autoSaveInFlight = false;
+  flash("Не вдалося автоматично зберегти документ.");
+};
+setInterval(autoSave,60_000);
 function restoreDraft() {
   try {
     const draft = JSON.parse(localStorage.getItem(draftStorageKey));
@@ -1513,6 +1549,8 @@ async function confirmReplace() {
   return html() === savedHtml || await ask({title:"Замінити документ?",info:"У поточному документі є незбережені зміни.",ok:"Продовжити"});
 }
 function loadDocument(pages,filename) {
+  autoSaveSequence++;
+  autoSaveInFlight = false;
   selectObject(null);
   activeCell = null;
   selectedCells = [];
@@ -1613,6 +1651,8 @@ async function action(type) {
       case "closeEditor": if (window.AndroidWord2) window.AndroidWord2.close(); else window.history.back(); break;
       case "newDoc": {
         if (await confirmReplace()) {
+          nativeFileId = null;
+          openingNativeFile = false;
           loadDocument([newPage()],"Документ 1");
           window.AndroidWord2?.newDocument();
         }
@@ -1682,11 +1722,19 @@ window.word2OpenFromApp = async (filename,base64,folderId,initialOpen = false,fi
     const bytes = Uint8Array.from(binary,character => character.charCodeAt(0));
     const file = new File([bytes],filename,{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
     loadDocument(await Docx.read(file),filename.replace(/\.docx$/i,""));
+    nativeFileId = fileId;
+    openingNativeFile = fileId != null;
+    if (fileId != null) try { localStorage.removeItem(draftStorageKey); } catch {}
     if (fileId != null) window.AndroidWord2?.documentOpened(fileId,folderId);
     flash("Відкрито " + filename);
   } catch (error) { flash(error.message || "Не вдалося відкрити DOCX."); }
 };
-window.word2SavedInApp = filename => {
+window.word2SavedInApp = (filename,fileId) => {
+  autoSaveSequence++;
+  autoSaveInFlight = false;
+  nativeFileId = fileId;
+  openingNativeFile = fileId != null;
+  if (fileId != null) try { localStorage.removeItem(draftStorageKey); } catch {}
   name = filename.replace(/\.docx$/i,"");
   savedHtml = html();
   update();
