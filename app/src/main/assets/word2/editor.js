@@ -226,10 +226,17 @@ function update() {
   const align = ({start:"left",end:"right"})[style.textAlign] || style.textAlign;
   $$("[data-command]").forEach(button => {
     const command = button.dataset.command;
-    const active = command.startsWith("justify") ? align === (command === "justifyFull" ? "justify" : command.slice(7).toLowerCase()) : document.queryCommandState(command);
+    const list = parent.closest("ol,ul");
+    const active = command === "insertOrderedList" ? list?.tagName === "OL" && !list.hasAttribute("data-multilevel") :
+      command === "insertUnorderedList" ? list?.tagName === "UL" :
+      command.startsWith("justify") ? align === (command === "justifyFull" ? "justify" : command.slice(7).toLowerCase()) : document.queryCommandState(command);
     button.classList.toggle("active",active);
     button.setAttribute("aria-pressed",active);
   });
+  const multilevelButton = $('[data-action="multilevel"]');
+  const multilevelActive = !!parent.closest('ol[data-multilevel]');
+  multilevelButton.classList.toggle("active",multilevelActive);
+  multilevelButton.setAttribute("aria-pressed",multilevelActive);
 }
 function flash(message) {
   $("#notice").textContent = message;
@@ -244,6 +251,13 @@ function blocks() {
   );
 }
 function exec(command,value) {
+  if (command === "insertOrderedList" || command === "insertUnorderedList") {
+    const kind = command === "insertOrderedList" ? "numbers" : "bullets";
+    const list = listRoot();
+    const sameKind = list && (kind === "bullets" ? list.tagName === "UL" : list.tagName === "OL" && !list.hasAttribute("data-multilevel"));
+    applyListPreset(kind,sameKind ? "none" : kind === "bullets" ? "disc" : "decimal");
+    return;
+  }
   change(() => {
     if (command.startsWith("justify")) {
       const align = command === "justifyFull" ? "justify" : command.slice(7).toLowerCase();
@@ -374,9 +388,24 @@ function applyListPreset(kind,style) {
     }
     const tag = kind === "bullets" ? "ul" : "ol";
     if (!list) {
-      document.execCommand(tag === "ul" ? "insertUnorderedList" : "insertOrderedList");
-      capture();
-      list = listRoot();
+      const range = selection().getRangeAt(0);
+      const paragraph = element(range.startContainer)?.closest("p");
+      if (paragraph && editor.contains(paragraph) && paragraph.contains(range.endContainer)) {
+        const collapsed = range.collapsed;
+        const marker = document.createTextNode("\u200b");
+        if (collapsed) range.insertNode(marker);
+        list = document.createElement(tag);
+        const item = document.createElement("li");
+        item.replaceChildren(...paragraph.childNodes);
+        if (item.textContent === "\u200b" && item.lastChild?.nodeName === "BR") item.lastChild.remove();
+        list.append(item);
+        paragraph.replaceWith(list);
+        if (collapsed) caret(marker,true);
+      } else {
+        document.execCommand(tag === "ul" ? "insertUnorderedList" : "insertOrderedList");
+        capture();
+        list = listRoot();
+      }
     }
     if (!list) return;
     list = retagList(list,tag);
@@ -386,6 +415,7 @@ function applyListPreset(kind,style) {
       delete level.dataset.multilevel;
       delete level.dataset.multilevelStyle;
       level.removeAttribute("type");
+      level.removeAttribute("start");
       if (kind === "bullets") level.dataset.marker = style;
       else if (kind === "numbers") {
         level.dataset.numberFormat = style;
@@ -481,8 +511,8 @@ function insertParagraphAtCaret() {
   capture();
   change(() => {
     const range = selection().getRangeAt(0);
-    const paragraph = element(range.startContainer)?.closest(".page > p");
-    if (!paragraph || !paragraph.contains(range.endContainer)) return;
+    const paragraph = element(range.startContainer)?.closest("p");
+    if (!paragraph || !editor.contains(paragraph) || !paragraph.contains(range.endContainer)) return;
     range.deleteContents();
     const tail = document.createRange();
     tail.setStart(range.startContainer,range.startOffset);
@@ -1764,7 +1794,7 @@ editor.addEventListener("beforeinput",event => {
     insertListItemAtCaret();
     return;
   }
-  if (event.inputType === "insertParagraph" && element(selection().anchorNode)?.closest(".page > p")) {
+  if (event.inputType === "insertParagraph" && editor.contains(element(selection().anchorNode)?.closest("p"))) {
     event.preventDefault();
     insertParagraphAtCaret();
     return;
@@ -1817,13 +1847,13 @@ document.addEventListener("keydown",event => {
   }
   if ($("#dialog").open || shareDialog.open || event.target.matches?.("input,select")) return;
   const editing = event.target === editor || editor.contains(event.target);
-  if (editing && event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey && listItemAtSelection()) {
+  if (editing && event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing && listItemAtSelection()) {
     event.preventDefault();
     insertListItemAtCaret();
     return;
   }
-  if (editing && event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey &&
-      element(selection().anchorNode)?.closest(".page > p")) {
+  if (editing && event.key === "Enter" && !event.shiftKey && !event.altKey && !event.isComposing &&
+      editor.contains(element(selection().anchorNode)?.closest("p"))) {
     event.preventDefault();
     insertParagraphAtCaret();
     return;
@@ -1862,7 +1892,7 @@ document.addEventListener("keydown",event => {
     removeObject();
   }
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-  const command = ({z:event.shiftKey?"redo":"undo",y:"redo",s:"saveDoc",enter:"pageBreak"})[event.key.toLowerCase()];
+  const command = ({z:event.shiftKey?"redo":"undo",y:"redo",s:"saveDoc"})[event.key.toLowerCase()];
   if (command) {
     event.preventDefault();
     void action(command);

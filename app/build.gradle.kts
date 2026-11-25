@@ -27,8 +27,8 @@ android {
         applicationId = "ua.school.windowsdesktop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.1.14"
+        versionCode = 17
+        versionName = "0.1.15"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
